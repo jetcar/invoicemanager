@@ -1,6 +1,11 @@
 """
 Estonian e-invoice 1.2 and UBL 2.1 XML parsers.
 Produces a dict that can be fed into the Invoice model.
+
+Security note: all XML parsing uses a hardened lxml XMLParser with
+  - resolve_entities=False  (prevents XXE / entity-expansion attacks)
+  - no_network=True         (blocks external DTD/schema fetches)
+  - huge_tree=False         (limits tree depth to prevent DoS)
 """
 from __future__ import annotations
 
@@ -8,6 +13,24 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 from lxml import etree
+
+
+# ---------------------------------------------------------------------------
+# Shared safe parser – used for every fromstring() call in this module.
+# CVE addressed: lxml XXE via default iterparse()/ETCompatXMLParser()
+# Fixed in lxml >= 6.1.0; this explicit configuration also prevents the
+# vulnerability in earlier versions that may end up on the classpath.
+# ---------------------------------------------------------------------------
+_SAFE_PARSER = etree.XMLParser(
+    resolve_entities=False,
+    no_network=True,
+    huge_tree=False,
+)
+
+
+def _safe_fromstring(xml_bytes: bytes) -> etree._Element:
+    """Parse XML bytes using the hardened parser. Raises etree.XMLSyntaxError on bad input."""
+    return etree.fromstring(xml_bytes, parser=_SAFE_PARSER)
 
 
 # ──────────────────────────────────────────────
@@ -52,7 +75,7 @@ def _et_date(element, xpath: str, ns: dict = _ET_NS) -> Optional[date]:
 
 def parse_estonian_einvoice(xml_bytes: bytes) -> dict:
     """Parse Estonian e-invoice XML 1.2 into a normalised dict."""
-    root = etree.fromstring(xml_bytes)
+    root = _safe_fromstring(xml_bytes)
 
     # Try with namespace, fall back to no-namespace parsing
     inv = root.xpath("//e:Invoice", namespaces=_ET_NS)
@@ -162,7 +185,7 @@ def _ubl_date(element, xpath: str) -> Optional[date]:
 
 def parse_ubl_invoice(xml_bytes: bytes) -> dict:
     """Parse a UBL 2.1 Invoice XML into a normalised dict."""
-    root = etree.fromstring(xml_bytes)
+    root = _safe_fromstring(xml_bytes)
 
     invoice_number = _ubl_text(root, "cbc:ID")
     invoice_date = _ubl_date(root, "cbc:IssueDate")
@@ -231,7 +254,7 @@ def parse_ubl_invoice(xml_bytes: bytes) -> dict:
 
 def parse_einvoice_xml(xml_bytes: bytes) -> dict:
     """Auto-detect and parse e-invoice XML (Estonian 1.2 or UBL 2.1)."""
-    root = etree.fromstring(xml_bytes)
+    root = _safe_fromstring(xml_bytes)
     ns = root.nsmap.get(None, "") or ""
     tag = root.tag
 
