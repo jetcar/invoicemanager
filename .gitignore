@@ -1,0 +1,43 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment
+.env
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Android build artifacts
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/app/build/
+mobile/android/build/
+*.apk
+*.aab
+*.keystore
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
