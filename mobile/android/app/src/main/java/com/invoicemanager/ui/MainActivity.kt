@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.webkit.*
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.invoicemanager.databinding.ActivityMainBinding
 import com.invoicemanager.services.AuthTokenManager
@@ -32,6 +33,7 @@ class MainActivity : AppCompatActivity() {
 
         tokenManager = AuthTokenManager(this)
         setupWebView()
+        setupBackNavigation()
         handleIntent(intent)
     }
 
@@ -85,6 +87,19 @@ class MainActivity : AppCompatActivity() {
         webView.loadUrl(Constants.BASE_URL)
     }
 
+    private fun setupBackNavigation() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (binding.webView.canGoBack()) {
+                    binding.webView.goBack()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+    }
+
     private fun handleIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         // Handle invoicemanager://login?token=... deep link (magic login)
@@ -96,14 +111,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun startQRScanner() {
         startActivity(Intent(this, QRScanActivity::class.java))
-    }
-
-    override fun onBackPressed() {
-        if (binding.webView.canGoBack()) {
-            binding.webView.goBack()
-        } else {
-            super.onBackPressed()
-        }
     }
 
     /**

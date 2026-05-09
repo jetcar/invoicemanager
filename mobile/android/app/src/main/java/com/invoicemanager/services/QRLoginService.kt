@@ -4,14 +4,26 @@ import com.invoicemanager.utils.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 /**
  * Calls the auth-service magic-link confirm endpoint to confirm a QR login session.
  * The session_token comes from scanning the QR code shown in the desktop browser.
  */
 object QRLoginService {
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     fun confirmLogin(
         sessionToken: String,
@@ -20,28 +32,23 @@ object QRLoginService {
     ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("${Constants.API_BASE_URL}/api/v1/auth/magic-link/confirm/$sessionToken")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.setRequestProperty("Accept", "application/json")
-                conn.connectTimeout = 10_000
-                conn.readTimeout = 10_000
+                val url = "${Constants.API_BASE_URL}/api/v1/auth/magic-link/confirm/$sessionToken"
+                val request = Request.Builder()
+                    .url(url)
+                    .post("{}".toRequestBody(jsonMediaType))
+                    .build()
 
-                val responseCode = conn.responseCode
-                conn.disconnect()
-
-                CoroutineScope(Dispatchers.Main).launch {
-                    if (responseCode in 200..299) {
-                        onSuccess()
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        CoroutineScope(Dispatchers.Main).launch { onSuccess() }
                     } else {
-                        onError("Server returned $responseCode")
+                        val msg = "Server returned ${response.code}"
+                        CoroutineScope(Dispatchers.Main).launch { onError(msg) }
                     }
                 }
-            } catch (e: Exception) {
-                CoroutineScope(Dispatchers.Main).launch {
-                    onError(e.message ?: "Network error")
-                }
+            } catch (e: IOException) {
+                val msg = e.message ?: "Network error"
+                CoroutineScope(Dispatchers.Main).launch { onError(msg) }
             }
         }
     }
