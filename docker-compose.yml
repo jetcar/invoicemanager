@@ -1,0 +1,353 @@
+version: "3.9"
+
+networks:
+  invoicemanager:
+    driver: bridge
+
+volumes:
+  postgres_auth_data:
+  postgres_company_data:
+  postgres_invoice_data:
+  postgres_supplier_data:
+  postgres_notification_data:
+  postgres_audit_data:
+  postgres_archive_data:
+  redis_data:
+  kafka_data:
+  zookeeper_data:
+
+services:
+  # ──────────────────────────────────────────────
+  # Infrastructure
+  # ──────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    ports:
+      - "29092:29092"
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    ports:
+      - "8090:8080"
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispassword}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Databases (one per service)
+  # ──────────────────────────────────────────────
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: postgres-auth
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  postgres-company:
+    image: postgres:16-alpine
+    container_name: postgres-company
+    environment:
+      POSTGRES_DB: company_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_company_data:/var/lib/postgresql/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  postgres-invoice:
+    image: postgres:16-alpine
+    container_name: postgres-invoice
+    environment:
+      POSTGRES_DB: invoice_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_invoice_data:/var/lib/postgresql/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  postgres-supplier:
+    image: postgres:16-alpine
+    container_name: postgres-supplier
+    environment:
+      POSTGRES_DB: supplier_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_supplier_data:/var/lib/postgresql/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  postgres-notification:
+    image: postgres:16-alpine
+    container_name: postgres-notification
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_notification_data:/var/lib/postgresql/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  postgres-audit:
+    image: postgres:16-alpine
+    container_name: postgres-audit
+    environment:
+      POSTGRES_DB: audit_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_audit_data:/var/lib/postgresql/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  postgres-archive:
+    image: postgres:16-alpine
+    container_name: postgres-archive
+    environment:
+      POSTGRES_DB: archive_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_archive_data:/var/lib/postgresql/data
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Microservices
+  # ──────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    depends_on:
+      - postgres-auth
+      - redis
+      - kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-auth:5432/auth_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@invoicemanager.local}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  company-service:
+    build:
+      context: ./services/company-service
+      dockerfile: Dockerfile
+    container_name: company-service
+    depends_on:
+      - postgres-company
+      - redis
+      - kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-company:5432/company_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/1
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  invoice-service:
+    build:
+      context: ./services/invoice-service
+      dockerfile: Dockerfile
+    container_name: invoice-service
+    depends_on:
+      - postgres-invoice
+      - redis
+      - kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-invoice:5432/invoice_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/2
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  supplier-service:
+    build:
+      context: ./services/supplier-service
+      dockerfile: Dockerfile
+    container_name: supplier-service
+    depends_on:
+      - postgres-supplier
+      - redis
+      - kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-supplier:5432/supplier_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/3
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    depends_on:
+      - postgres-notification
+      - redis
+      - kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-notification:5432/notification_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/4
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@invoicemanager.local}
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  audit-service:
+    build:
+      context: ./services/audit-service
+      dockerfile: Dockerfile
+    container_name: audit-service
+    depends_on:
+      - postgres-audit
+      - kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-audit:5432/audit_db
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  archive-service:
+    build:
+      context: ./services/archive-service
+      dockerfile: Dockerfile
+    container_name: archive-service
+    depends_on:
+      - postgres-archive
+      - postgres-invoice
+      - kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-archive:5432/archive_db
+      INVOICE_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-invoice:5432/invoice_db
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
+      ARCHIVE_THRESHOLD_DAYS: ${ARCHIVE_THRESHOLD_DAYS:-365}
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # API Gateway / Load Balancer
+  # ──────────────────────────────────────────────
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: haproxy
+    depends_on:
+      - auth-service
+      - company-service
+      - invoice-service
+      - supplier-service
+      - notification-service
+      - audit-service
+      - archive-service
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"
+    networks:
+      - invoicemanager
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Dev tooling
+  # ──────────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - invoicemanager
+    restart: unless-stopped
