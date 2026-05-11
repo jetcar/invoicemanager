@@ -12,6 +12,8 @@ on:
 jobs:
   invoice-spec-first:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -35,8 +37,11 @@ jobs:
 
       - name: Ensure generated artifacts are committed
         run: |
-          git add specs/invoice-service/v1/openapi.json services/invoice-service/generated services/invoice-service/tests/generated
-          git diff --cached --exit-code
+          if [ -n "$(git status --porcelain -- specs/invoice-service/v1/openapi.json services/invoice-service/generated services/invoice-service/tests/generated)" ]; then
+            echo "Generated artifacts are out of date. Run: python scripts/spec/generate_invoice_artifacts.py"
+            git status --porcelain -- specs/invoice-service/v1/openapi.json services/invoice-service/generated services/invoice-service/tests/generated
+            exit 1
+          fi
 
       - name: Run invoice-service tests (unit + generated contract)
         run: |
@@ -64,12 +69,12 @@ jobs:
             --head specs/invoice-service/v1/openapi.json
 
       - name: Enforce compatibility unless override label exists
-        if: github.event_name == 'pull_request' && steps.compatibility.outcome == 'failure' && !contains(join(github.event.pull_request.labels.*.name, ','), 'allow-breaking-openapi')
+        if: github.event_name == 'pull_request' && steps.compatibility.outcome == 'failure' && !contains(github.event.pull_request.labels.*.name, 'allow-breaking-openapi')
         run: |
           echo "Breaking OpenAPI changes detected. Add the 'allow-breaking-openapi' label to override."
           exit 1
 
       - name: Log compatibility override
-        if: github.event_name == 'pull_request' && steps.compatibility.outcome == 'failure' && contains(join(github.event.pull_request.labels.*.name, ','), 'allow-breaking-openapi')
+        if: github.event_name == 'pull_request' && steps.compatibility.outcome == 'failure' && contains(github.event.pull_request.labels.*.name, 'allow-breaking-openapi')
         run: |
           echo "Breaking changes allowed by allow-breaking-openapi label."

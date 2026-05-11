@@ -26,8 +26,8 @@ DEFAULT_TESTS = ROOT / "services" / "invoice-service" / "tests" / "generated" / 
 def to_identifier(value: str) -> str:
     candidate = re.sub(r"[^0-9a-zA-Z_]", "_", value).strip("_").lower()
     if not candidate:
-        candidate = "value"
-    if candidate[0].isdigit():
+        candidate = "field"
+    if candidate and candidate[0].isdigit():
         candidate = f"_{candidate}"
     if keyword.iskeyword(candidate):
         candidate = f"{candidate}_"
@@ -146,6 +146,7 @@ def generate_client(spec: dict[str, Any]) -> str:
         "from __future__ import annotations",
         "",
         "from typing import Any",
+        "from urllib.parse import quote",
         "",
         "import httpx",
         "",
@@ -197,17 +198,26 @@ def generate_client(spec: dict[str, Any]) -> str:
                     param_defs.append(f"{py_name}: Any | None = None")
                 query_param_map.append(f"'{param_name}': {py_name}")
 
+        request_content = (op["request_body"] or {}).get("content", {}) if isinstance(op["request_body"], dict) else {}
+        uses_multipart = "multipart/form-data" in request_content
         has_request_body = bool(op["request_body"])
         if has_request_body:
-            param_defs.append("json_body: dict[str, Any] | None = None")
+            if uses_multipart:
+                param_defs.append("files: dict[str, Any] | None = None")
+            else:
+                param_defs.append("json_body: dict[str, Any] | None = None")
 
         param_defs.extend(["headers: dict[str, str] | None = None", "timeout: float | None = None"])
         signature = ", ".join(["self"] + param_defs)
 
         lines.append(f"    def {method_name}({signature}) -> httpx.Response:")
         if format_args:
+            for param in op["parameters"]:
+                if param.get("in") == "path" and param.get("name"):
+                    py_name = to_identifier(param["name"])
+                    lines.append(f"        {py_name} = quote(str({py_name}), safe='')")
             fmt = ", ".join(format_args)
-            lines.append(f"        path = f\"{op['path']}\".format({fmt})")
+            lines.append(f"        path = \"{op['path']}\".format({fmt})")
         else:
             lines.append(f"        path = \"{op['path']}\"")
 
@@ -220,8 +230,12 @@ def generate_client(spec: dict[str, Any]) -> str:
         lines.append("        req_timeout = self.timeout if timeout is None else timeout")
         lines.append("        kwargs: dict[str, Any] = {'headers': self._headers(headers), 'params': params, 'timeout': req_timeout}")
         if has_request_body:
-            lines.append("        if json_body is not None:")
-            lines.append("            kwargs['json'] = json_body")
+            if uses_multipart:
+                lines.append("        if files is not None:")
+                lines.append("            kwargs['files'] = files")
+            else:
+                lines.append("        if json_body is not None:")
+                lines.append("            kwargs['json'] = json_body")
         lines.append(f"        return self._request('{op['method'].upper()}', path, **kwargs)")
         lines.append("")
 
