@@ -1,0 +1,19 @@
+{{- range $key, $svc := .Values.services }}
+{{- if gt ($svc.replicas | default 1 | int) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    {{- include "invoicemanager.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $svc.name }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $svc.name }}
+      app.kubernetes.io/part-of: invoicemanager
+{{- end }}
+{{- end }}

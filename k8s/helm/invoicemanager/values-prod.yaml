@@ -1,0 +1,47 @@
+# Production overrides — values here are merged with values.yaml
+global:
+  imageRegistry: "europe-west1-docker.pkg.dev/invoicemanager-prod-CHANGEME/invoicemanager"
+  gcpProjectId: "invoicemanager-prod-CHANGEME"
+  gcpAppSaEmail: "invoicemanager-app-prod@invoicemanager-prod-CHANGEME.iam.gserviceaccount.com"
+  secretPrefix: "invoicemanager-prod"
+
+ingress:
+  host: "invoicemanager.example.com"
+  tls:
+    - secretName: invoicemanager-tls
+      hosts:
+        - invoicemanager.example.com
+
+config:
+  appBaseUrl: "https://invoicemanager.example.com"
+
+services:
+  auth:
+    replicas: 3
+    hpa:
+      maxReplicas: 10
+  company:
+    replicas: 3
+    hpa:
+      maxReplicas: 10
+  invoice:
+    replicas: 3
+    hpa:
+      maxReplicas: 12
+  supplier:
+    replicas: 2
+  notification:
+    replicas: 2
+  audit:
+    replicas: 2
+    hpa:
+      enabled: true
+      maxReplicas: 4
+  archive:
+    replicas: 2
+    hpa:
+      enabled: true
+      maxReplicas: 4
+
+haproxy:
+  replicas: 3

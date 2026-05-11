@@ -1,0 +1,285 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "k8s/**"
+      - ".github/workflows/build-deploy.yml"
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      image_tag:
+        description: "Image tag to deploy (leave empty to build from HEAD)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  HELM_VERSION: "3.16.0"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Build: compile image tag, build all 7 service images and push to GAR
+  # ─────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: meta
+        run: |
+          if [[ -n "${{ inputs.image_tag }}" ]]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_DEV }}
+          service_account: ${{ secrets.GCP_SA_EMAIL_DEV }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push — auth-service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/auth-service
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGISTRY_DEV }}/auth-service:${{ steps.meta.outputs.tag }}
+            ${{ secrets.GCP_REGISTRY_DEV }}/auth-service:latest
+          cache-from: type=gha,scope=auth-service
+          cache-to: type=gha,scope=auth-service,mode=max
+
+      - name: Build and push — company-service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/company-service
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGISTRY_DEV }}/company-service:${{ steps.meta.outputs.tag }}
+            ${{ secrets.GCP_REGISTRY_DEV }}/company-service:latest
+          cache-from: type=gha,scope=company-service
+          cache-to: type=gha,scope=company-service,mode=max
+
+      - name: Build and push — invoice-service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/invoice-service
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGISTRY_DEV }}/invoice-service:${{ steps.meta.outputs.tag }}
+            ${{ secrets.GCP_REGISTRY_DEV }}/invoice-service:latest
+          cache-from: type=gha,scope=invoice-service
+          cache-to: type=gha,scope=invoice-service,mode=max
+
+      - name: Build and push — supplier-service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/supplier-service
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGISTRY_DEV }}/supplier-service:${{ steps.meta.outputs.tag }}
+            ${{ secrets.GCP_REGISTRY_DEV }}/supplier-service:latest
+          cache-from: type=gha,scope=supplier-service
+          cache-to: type=gha,scope=supplier-service,mode=max
+
+      - name: Build and push — notification-service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/notification-service
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGISTRY_DEV }}/notification-service:${{ steps.meta.outputs.tag }}
+            ${{ secrets.GCP_REGISTRY_DEV }}/notification-service:latest
+          cache-from: type=gha,scope=notification-service
+          cache-to: type=gha,scope=notification-service,mode=max
+
+      - name: Build and push — audit-service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/audit-service
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGISTRY_DEV }}/audit-service:${{ steps.meta.outputs.tag }}
+            ${{ secrets.GCP_REGISTRY_DEV }}/audit-service:latest
+          cache-from: type=gha,scope=audit-service
+          cache-to: type=gha,scope=audit-service,mode=max
+
+      - name: Build and push — archive-service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/archive-service
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGISTRY_DEV }}/archive-service:${{ steps.meta.outputs.tag }}
+            ${{ secrets.GCP_REGISTRY_DEV }}/archive-service:latest
+          cache-from: type=gha,scope=archive-service
+          cache-to: type=gha,scope=archive-service,mode=max
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Deploy to dev
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy-dev:
+    name: Deploy to dev
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: build
+    if: github.event_name == 'push' || inputs.environment == 'dev'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_DEV }}
+          service_account: ${{ secrets.GCP_SA_EMAIL_DEV }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: invoicemanager-dev
+          location: ${{ secrets.GCP_REGION }}
+          project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm upgrade / install
+        run: |
+          helm upgrade --install invoicemanager k8s/helm/invoicemanager \
+            --namespace invoicemanager \
+            --create-namespace \
+            --set global.imageTag="${{ needs.build.outputs.image_tag }}" \
+            --set global.imageRegistry="${{ secrets.GCP_REGISTRY_DEV }}" \
+            --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_DEV }}" \
+            --set global.gcpAppSaEmail="${{ secrets.GCP_APP_SA_EMAIL_DEV }}" \
+            --set global.secretPrefix="invoicemanager-dev" \
+            --wait \
+            --timeout=10m \
+            --atomic
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Deploy to staging (requires manual approval in GitHub Environments)
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    environment: staging
+    needs: [build, deploy-dev]
+    if: github.event_name == 'push' || inputs.environment == 'staging'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_STAGING }}
+          service_account: ${{ secrets.GCP_SA_EMAIL_STAGING }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: invoicemanager-staging
+          location: ${{ secrets.GCP_REGION }}
+          project_id: ${{ secrets.GCP_PROJECT_ID_STAGING }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm upgrade / install
+        run: |
+          helm upgrade --install invoicemanager k8s/helm/invoicemanager \
+            --namespace invoicemanager \
+            --create-namespace \
+            --values k8s/helm/invoicemanager/values-staging.yaml \
+            --set global.imageTag="${{ needs.build.outputs.image_tag }}" \
+            --set global.imageRegistry="${{ secrets.GCP_REGISTRY_STAGING }}" \
+            --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_STAGING }}" \
+            --set global.gcpAppSaEmail="${{ secrets.GCP_APP_SA_EMAIL_STAGING }}" \
+            --set global.secretPrefix="invoicemanager-staging" \
+            --wait \
+            --timeout=10m \
+            --atomic
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Deploy to production (requires required reviewers in GitHub Environments)
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy-prod:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [build, deploy-staging]
+    if: github.event_name == 'push' || inputs.environment == 'prod'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_SA_EMAIL_PROD }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: invoicemanager-prod
+          location: ${{ secrets.GCP_REGION }}
+          project_id: ${{ secrets.GCP_PROJECT_ID_PROD }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm upgrade / install
+        run: |
+          helm upgrade --install invoicemanager k8s/helm/invoicemanager \
+            --namespace invoicemanager \
+            --create-namespace \
+            --values k8s/helm/invoicemanager/values-prod.yaml \
+            --set global.imageTag="${{ needs.build.outputs.image_tag }}" \
+            --set global.imageRegistry="${{ secrets.GCP_REGISTRY_PROD }}" \
+            --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_PROD }}" \
+            --set global.gcpAppSaEmail="${{ secrets.GCP_APP_SA_EMAIL_PROD }}" \
+            --set global.secretPrefix="invoicemanager-prod" \
+            --wait \
+            --timeout=15m \
+            --atomic
+
+      - name: Tag release in Git
+        run: |
+          git tag "release-$(date +%Y%m%d%H%M%S)-${{ needs.build.outputs.image_tag }}"
+          git push origin --tags
