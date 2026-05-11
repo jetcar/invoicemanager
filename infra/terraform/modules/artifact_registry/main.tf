@@ -21,7 +21,7 @@ resource "google_artifact_registry_repository" "images" {
     action = "DELETE"
 
     condition {
-      older_than = "${var.delete_older_than_days * 24}h"
+      older_than = "${var.delete_older_than_days * 24}h" # days → hours (Artifact Registry uses duration strings)
       tag_state  = "UNTAGGED"
     }
   }

@@ -14,10 +14,12 @@ global:
   # Name of the Kubernetes ServiceAccount that maps to the GCP App SA via WI
   serviceAccountName: invoicemanager-app
 
-  # GCP project ID (used for WI annotation)
+  # GCP project ID (used for WI annotation).
+  # MUST be overridden per environment — set via --set global.gcpProjectId=... in Helm or in values-<env>.yaml.
   gcpProjectId: "invoicemanager-dev-CHANGEME"
 
-  # GCP service account email for Workload Identity
+  # GCP service account email for Workload Identity.
+  # MUST be overridden per environment — set via --set global.gcpAppSaEmail=... in Helm or in values-<env>.yaml.
   gcpAppSaEmail: "invoicemanager-app-dev@invoicemanager-dev-CHANGEME.iam.gserviceaccount.com"
 
   # Secret name prefix used in External Secrets Operator references

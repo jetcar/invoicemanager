@@ -148,6 +148,11 @@ Terraform created placeholder secret versions. Replace them with real values bef
 ENVIRONMENT=dev
 PROJECT=my-invoicemanager-dev
 
+# PostgreSQL user
+echo -n "postgres" | \
+  gcloud secrets versions add "invoicemanager-${ENVIRONMENT}-postgres-user" \
+    --project="${PROJECT}" --data-file=-
+
 # PostgreSQL password
 echo -n "my-strong-postgres-password" | \
   gcloud secrets versions add "invoicemanager-${ENVIRONMENT}-postgres-password" \

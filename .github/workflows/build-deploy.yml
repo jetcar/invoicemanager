@@ -281,5 +281,7 @@ jobs:
 
       - name: Tag release in Git
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "release-$(date +%Y%m%d%H%M%S)-${{ needs.build.outputs.image_tag }}"
           git push origin --tags

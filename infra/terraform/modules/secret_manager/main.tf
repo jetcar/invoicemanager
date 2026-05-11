@@ -4,6 +4,7 @@ locals {
   # via: gcloud secrets versions add <name> --data-file=-
   # or via the GCP Console on first deploy.
   secret_names = {
+    postgres_user            = "${var.env_prefix}-postgres-user"
     postgres_password        = "${var.env_prefix}-postgres-password"
     redis_password           = "${var.env_prefix}-redis-password"
     secret_key               = "${var.env_prefix}-secret-key"
