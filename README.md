@@ -111,6 +111,29 @@ docker compose up -d
 - QR code scanner for passwordless login
 - Encrypted token storage (Android Keystore)
 
+## Visual UI/UX Editing Integration (for existing web UI)
+
+This repository does **not** include a React/Next/Vue/Angular web frontend codebase (it contains backend microservices + Android WebView shell).  
+If your web UI is in a separate repository, integrate one of these tools there and connect it to GitHub:
+
+- **React / Next.js**: **Plasmic** or **Builder.io (Visual Copilot)**
+- **Figma-first to code**: **Locofy** or **Anima**
+- **CMS-driven visual pages**: **Webflow + DevLink**
+
+### Recommended GitHub workflow
+
+1. Pick one page as a pilot (for example: login or invoice list).
+2. Connect the UI tool to your frontend repository via GitHub App/integration or tool CLI.
+3. Map generated UI to existing components/routes so design edits reuse your code structure.
+4. Generate changes into a feature branch and open a Pull Request.
+5. Run CI, review generated code quality, and merge after approval.
+
+### InvoiceManager-specific notes
+
+- Keep visual UI generation in the **web frontend repository** (where web pages/components exist).
+- Keep this repository focused on API/service contracts and mobile wrapper behavior.
+- If UI changes require new/changed backend fields, update service APIs here and coordinate via PRs in both repositories.
+
 ## Running Tests
 
 ```bash
