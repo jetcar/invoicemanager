@@ -119,6 +119,51 @@ pip install lxml pytest
 python -m pytest tests/ -v
 ```
 
+## Spec-First Workflow (Invoice Service)
+
+Invoice service now uses a **spec-first OpenAPI workflow** with a committed, versioned contract:
+
+- Contract source: `/home/runner/work/invoicemanager/invoicemanager/specs/invoice-service/v1/openapi.json`
+- Generated client/DTOs: `/home/runner/work/invoicemanager/invoicemanager/services/invoice-service/generated/client/python/`
+- Generated contract tests: `/home/runner/work/invoicemanager/invoicemanager/services/invoice-service/tests/generated/`
+
+### Regenerate artifacts after spec changes
+
+```bash
+cd /home/runner/work/invoicemanager/invoicemanager
+python scripts/spec/generate_invoice_artifacts.py
+```
+
+### Run invoice service tests (including generated contract checks)
+
+```bash
+cd /home/runner/work/invoicemanager/invoicemanager/services/invoice-service
+pip install -r requirements.txt -r tests/requirements-test.txt
+PYTHONPATH=. python -m pytest tests/ -v
+```
+
+### Breaking-change check
+
+```bash
+cd /home/runner/work/invoicemanager/invoicemanager
+python scripts/spec/check_openapi_breaking.py \
+  --base /path/to/base/openapi.json \
+  --head specs/invoice-service/v1/openapi.json
+```
+
+### PR automation
+
+GitHub Actions workflow: `/home/runner/work/invoicemanager/invoicemanager/.github/workflows/spec-first-invoice.yml`
+
+For pull requests touching invoice-service/spec tooling, CI will:
+
+1. Regenerate spec-driven artifacts
+2. Fail if generated output is not committed
+3. Run invoice tests (existing + generated contract tests)
+4. Detect breaking OpenAPI changes against base branch
+
+If a breaking change is intentional, add PR label: `allow-breaking-openapi`.
+
 ## Project Structure
 
 ```
