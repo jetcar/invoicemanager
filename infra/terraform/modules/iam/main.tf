@@ -100,11 +100,8 @@ resource "google_project_iam_member" "app_secret_accessor" {
 }
 
 # Allow KSA (Kubernetes Service Account) to impersonate the GCP SA via WI
-resource "google_service_account_iam_binding" "app_workload_identity" {
+resource "google_service_account_iam_member" "app_workload_identity" {
   service_account_id = google_service_account.app.name
   role               = "roles/iam.workloadIdentityUser"
-
-  members = [
-    "serviceAccount:${var.project_id}.svc.id.goog[invoicemanager/invoicemanager-app]",
-  ]
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[invoicemanager/invoicemanager-app]"
 }
