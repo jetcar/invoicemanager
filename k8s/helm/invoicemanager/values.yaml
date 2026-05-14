@@ -1,0 +1,359 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Global settings
+# ─────────────────────────────────────────────────────────────────────────────
+global:
+  # GCP Artifact Registry image prefix — override per environment
+  # Format: <region>-docker.pkg.dev/<project>/<repository>
+  imageRegistry: "europe-west1-docker.pkg.dev/invoicemanager-dev/invoicemanager"
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+
+  # Kubernetes namespace where all resources are deployed
+  namespace: invoicemanager
+
+  # Name of the Kubernetes ServiceAccount that maps to the GCP App SA via WI
+  serviceAccountName: invoicemanager-app
+
+  # GCP project ID (used for WI annotation).
+  # MUST be overridden per environment — set via --set global.gcpProjectId=... in Helm or in values-<env>.yaml.
+  gcpProjectId: "invoicemanager-dev-CHANGEME"
+
+  # GCP service account email for Workload Identity.
+  # MUST be overridden per environment — set via --set global.gcpAppSaEmail=... in Helm or in values-<env>.yaml.
+  gcpAppSaEmail: "invoicemanager-app-dev@invoicemanager-dev-CHANGEME.iam.gserviceaccount.com"
+
+  # Secret name prefix used in External Secrets Operator references
+  secretPrefix: "invoicemanager-dev"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# External Secrets Operator
+# ─────────────────────────────────────────────────────────────────────────────
+externalSecrets:
+  # Set to true once External Secrets Operator is installed in the cluster
+  enabled: true
+  # Refresh interval for syncing secrets from GCP Secret Manager
+  refreshInterval: "1h"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ingress (GKE Ingress with GCP Load Balancer)
+# ─────────────────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+  # Override with your actual domain
+  host: "invoicemanager.example.com"
+  tls: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Non-sensitive config (shared across all services)
+# ─────────────────────────────────────────────────────────────────────────────
+config:
+  accessTokenExpireMinutes: "60"
+  refreshTokenExpireDays: "30"
+  smtpHost: "smtp.example.com"
+  smtpPort: "587"
+  smtpFrom: "noreply@invoicemanager.example.com"
+  appBaseUrl: "https://invoicemanager.example.com"
+  archiveThresholdDays: "365"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# In-cluster infrastructure (Kafka, Redis, Postgres)
+# Set enabled=false when using managed GCP services (Pub/Sub, Memorystore, Cloud SQL)
+# ─────────────────────────────────────────────────────────────────────────────
+infrastructure:
+  kafka:
+    enabled: true
+    image: confluentinc/cp-kafka:7.6.0
+    zookeeperImage: confluentinc/cp-zookeeper:7.6.0
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    storage: "5Gi"
+
+  redis:
+    enabled: true
+    image: redis:7.2-alpine
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "100m"
+    storage: "1Gi"
+
+  postgres:
+    enabled: true
+    image: postgres:16-alpine
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "250m"
+    storagePerDb: "5Gi"
+    # Individual databases — one per service
+    databases:
+      - name: auth
+        db: auth_db
+      - name: company
+        db: company_db
+      - name: invoice
+        db: invoice_db
+      - name: supplier
+        db: supplier_db
+      - name: notification
+        db: notification_db
+      - name: audit
+        db: audit_db
+      - name: archive
+        db: archive_db
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Application microservices
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  auth:
+    name: auth-service
+    image: auth-service
+    port: 8000
+    replicas: 2
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+    env:
+      DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-auth:5432/auth_db"
+      REDIS_URL:
+        secretKeyRef: false
+        value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+      KAFKA_BOOTSTRAP_SERVERS:
+        secretKeyRef: false
+        value: "kafka:9092"
+      ACCESS_TOKEN_EXPIRE_MINUTES:
+        secretKeyRef: false
+        configKey: accessTokenExpireMinutes
+      REFRESH_TOKEN_EXPIRE_DAYS:
+        secretKeyRef: false
+        configKey: refreshTokenExpireDays
+      SMTP_HOST:
+        secretKeyRef: false
+        configKey: smtpHost
+      SMTP_PORT:
+        secretKeyRef: false
+        configKey: smtpPort
+      SMTP_FROM:
+        secretKeyRef: false
+        configKey: smtpFrom
+      APP_BASE_URL:
+        secretKeyRef: false
+        configKey: appBaseUrl
+
+  company:
+    name: company-service
+    image: company-service
+    port: 8000
+    replicas: 2
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+    env:
+      DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-company:5432/company_db"
+      REDIS_URL:
+        secretKeyRef: false
+        value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+      KAFKA_BOOTSTRAP_SERVERS:
+        secretKeyRef: false
+        value: "kafka:9092"
+
+  invoice:
+    name: invoice-service
+    image: invoice-service
+    port: 8000
+    replicas: 2
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+    env:
+      DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-invoice:5432/invoice_db"
+      REDIS_URL:
+        secretKeyRef: false
+        value: "redis://:$(REDIS_PASSWORD)@redis:6379/2"
+      KAFKA_BOOTSTRAP_SERVERS:
+        secretKeyRef: false
+        value: "kafka:9092"
+
+  supplier:
+    name: supplier-service
+    image: supplier-service
+    port: 8000
+    replicas: 2
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+    env:
+      DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-supplier:5432/supplier_db"
+      REDIS_URL:
+        secretKeyRef: false
+        value: "redis://:$(REDIS_PASSWORD)@redis:6379/3"
+      KAFKA_BOOTSTRAP_SERVERS:
+        secretKeyRef: false
+        value: "kafka:9092"
+
+  notification:
+    name: notification-service
+    image: notification-service
+    port: 8000
+    replicas: 2
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+    env:
+      DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-notification:5432/notification_db"
+      REDIS_URL:
+        secretKeyRef: false
+        value: "redis://:$(REDIS_PASSWORD)@redis:6379/4"
+      KAFKA_BOOTSTRAP_SERVERS:
+        secretKeyRef: false
+        value: "kafka:9092"
+      SMTP_HOST:
+        secretKeyRef: false
+        configKey: smtpHost
+      SMTP_PORT:
+        secretKeyRef: false
+        configKey: smtpPort
+      SMTP_FROM:
+        secretKeyRef: false
+        configKey: smtpFrom
+
+  audit:
+    name: audit-service
+    image: audit-service
+    port: 8000
+    replicas: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    hpa:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 2
+      targetCPUUtilizationPercentage: 70
+    env:
+      DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-audit:5432/audit_db"
+      KAFKA_BOOTSTRAP_SERVERS:
+        secretKeyRef: false
+        value: "kafka:9092"
+
+  archive:
+    name: archive-service
+    image: archive-service
+    port: 8000
+    replicas: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    hpa:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 2
+      targetCPUUtilizationPercentage: 70
+    env:
+      DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-archive:5432/archive_db"
+      INVOICE_DATABASE_URL:
+        secretKeyRef: false
+        value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-invoice:5432/invoice_db"
+      KAFKA_BOOTSTRAP_SERVERS:
+        secretKeyRef: false
+        value: "kafka:9092"
+      ARCHIVE_THRESHOLD_DAYS:
+        secretKeyRef: false
+        configKey: archiveThresholdDays
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HAProxy load balancer
+# ─────────────────────────────────────────────────────────────────────────────
+haproxy:
+  enabled: true
+  image: haproxy:2.9-alpine
+  replicas: 2
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"

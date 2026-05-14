@@ -1,0 +1,16 @@
+apiVersion: v2
+name: invoicemanager
+description: InvoiceManager – multi-tenant invoice management system (7 FastAPI microservices)
+type: application
+version: 0.1.0
+appVersion: "latest"
+
+maintainers:
+  - name: jetcar
+
+keywords:
+  - invoicemanager
+  - microservices
+  - fastapi
+
+dependencies: []

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: invoicemanager-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "invoicemanager.labels" . | nindent 4 }}
+data:
+  ACCESS_TOKEN_EXPIRE_MINUTES: {{ .Values.config.accessTokenExpireMinutes | quote }}
+  REFRESH_TOKEN_EXPIRE_DAYS: {{ .Values.config.refreshTokenExpireDays | quote }}
+  SMTP_HOST: {{ .Values.config.smtpHost | quote }}
+  SMTP_PORT: {{ .Values.config.smtpPort | quote }}
+  SMTP_FROM: {{ .Values.config.smtpFrom | quote }}
+  APP_BASE_URL: {{ .Values.config.appBaseUrl | quote }}
+  ARCHIVE_THRESHOLD_DAYS: {{ .Values.config.archiveThresholdDays | quote }}
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"

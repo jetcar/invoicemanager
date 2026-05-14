@@ -1,0 +1,20 @@
+# Staging overrides — values here are merged with values.yaml
+global:
+  imageRegistry: "europe-west1-docker.pkg.dev/invoicemanager-staging-CHANGEME/invoicemanager"
+  gcpProjectId: "invoicemanager-staging-CHANGEME"
+  gcpAppSaEmail: "invoicemanager-app-staging@invoicemanager-staging-CHANGEME.iam.gserviceaccount.com"
+  secretPrefix: "invoicemanager-staging"
+
+ingress:
+  host: "staging.invoicemanager.example.com"
+
+config:
+  appBaseUrl: "https://staging.invoicemanager.example.com"
+
+services:
+  auth:
+    replicas: 2
+  company:
+    replicas: 2
+  invoice:
+    replicas: 2

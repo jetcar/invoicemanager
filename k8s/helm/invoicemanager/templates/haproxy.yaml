@@ -1,0 +1,185 @@
+{{- if .Values.haproxy.enabled }}
+---
+# ConfigMap mirrors the existing haproxy/haproxy.cfg for the in-cluster deployment.
+# The GKE Ingress replaces HAProxy as the external entry point;
+# HAProxy runs as an internal routing layer if preferred.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "invoicemanager.labels" . | nindent 4 }}
+data:
+  haproxy.cfg: |
+    global
+        log stdout format raw local0
+        maxconn 50000
+
+    defaults
+        log     global
+        mode    http
+        option  httplog
+        option  dontlognull
+        option  forwardfor
+        option  http-server-close
+        timeout connect 5s
+        timeout client  30s
+        timeout server  30s
+
+    frontend stats
+        bind *:8404
+        stats enable
+        stats uri /stats
+        stats refresh 10s
+
+    frontend http_in
+        bind *:80
+        http-request set-header X-Request-ID %[uuid()]
+
+        acl path_auth        path_beg /api/v1/auth
+        acl path_companies   path_beg /api/v1/companies
+        acl path_orgs        path_beg /api/v1/organizations
+        acl path_invoices    path_beg /api/v1/invoices
+        acl path_suppliers   path_beg /api/v1/suppliers
+        acl path_notify      path_beg /api/v1/notifications
+        acl path_audit       path_beg /api/v1/audit
+        acl path_archive     path_beg /api/v1/archive
+
+        use_backend auth_backend         if path_auth
+        use_backend company_backend      if path_companies
+        use_backend company_backend      if path_orgs
+        use_backend invoice_backend      if path_invoices
+        use_backend supplier_backend     if path_suppliers
+        use_backend notification_backend if path_notify
+        use_backend audit_backend        if path_audit
+        use_backend archive_backend      if path_archive
+
+        acl path_health path_beg /health
+        use_backend health_backend if path_health
+
+        default_backend auth_backend
+
+    backend auth_backend
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        server auth1 auth-service:8000 check inter 10s rise 2 fall 3
+
+    backend company_backend
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        server company1 company-service:8000 check inter 10s rise 2 fall 3
+
+    backend invoice_backend
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        server invoice1 invoice-service:8000 check inter 10s rise 2 fall 3
+
+    backend supplier_backend
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        server supplier1 supplier-service:8000 check inter 10s rise 2 fall 3
+
+    backend notification_backend
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        server notification1 notification-service:8000 check inter 10s rise 2 fall 3
+
+    backend audit_backend
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        server audit1 audit-service:8000 check inter 10s rise 2 fall 3
+
+    backend archive_backend
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        server archive1 archive-service:8000 check inter 10s rise 2 fall 3
+
+    backend health_backend
+        balance roundrobin
+        server auth1 auth-service:8000 check
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haproxy
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "invoicemanager.labels" . | nindent 4 }}
+    app.kubernetes.io/name: haproxy
+spec:
+  replicas: {{ .Values.haproxy.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: haproxy
+      app.kubernetes.io/part-of: invoicemanager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: haproxy
+        app.kubernetes.io/part-of: invoicemanager
+      annotations:
+        checksum/config: {{ include (print .Template.BasePath "/haproxy.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: haproxy
+          image: {{ .Values.haproxy.image }}
+          ports:
+            - name: http
+              containerPort: 80
+            - name: stats
+              containerPort: 8404
+          resources:
+            {{- toYaml .Values.haproxy.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /stats
+              port: 8404
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /stats
+              port: 8404
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: haproxy-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: haproxy
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "invoicemanager.labels" . | nindent 4 }}
+    app.kubernetes.io/name: haproxy
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/part-of: invoicemanager
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: stats
+      port: 8404
+      targetPort: stats
+{{- end }}

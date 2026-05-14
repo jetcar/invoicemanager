@@ -1,0 +1,123 @@
+name: Infra Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/terraform/**"
+
+  # Allow manual trigger for a specific environment
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_VERSION: "1.9.8"
+
+jobs:
+  apply-dev:
+    name: Terraform Apply (dev)
+    runs-on: ubuntu-latest
+    # Requires a GitHub Environment named "dev" with optional branch protection rules
+    environment: dev
+    if: github.event_name == 'push' || inputs.environment == 'dev'
+    defaults:
+      run:
+        working-directory: infra/terraform/environments/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_DEV }}
+          service_account: ${{ secrets.GCP_SA_EMAIL_DEV }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+  apply-staging:
+    name: Terraform Apply (staging)
+    runs-on: ubuntu-latest
+    environment: staging   # Requires manual approval via GitHub Environments
+    needs: apply-dev
+    if: github.event_name == 'push' || inputs.environment == 'staging'
+    defaults:
+      run:
+        working-directory: infra/terraform/environments/staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_STAGING }}
+          service_account: ${{ secrets.GCP_SA_EMAIL_STAGING }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_STAGING }}
+
+  apply-prod:
+    name: Terraform Apply (prod)
+    runs-on: ubuntu-latest
+    environment: production  # Requires required reviewers set in GitHub Environments
+    needs: apply-staging
+    if: github.event_name == 'push' || inputs.environment == 'prod'
+    defaults:
+      run:
+        working-directory: infra/terraform/environments/prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_SA_EMAIL_PROD }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_PROD }}
