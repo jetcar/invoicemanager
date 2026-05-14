@@ -10,11 +10,12 @@ This document is the **single source of truth** for setting up GitHub → GCP in
 GitHub (main branch)
 │
 ├── .github/workflows/
-│   ├── test.yml            ← runs unit tests on every PR
-│   ├── infra-plan.yml      ← terraform plan on every PR touching infra/
-│   ├── infra-apply.yml     ← terraform apply on merge to main
-│   ├── build-deploy.yml    ← build images, push to GAR, helm deploy
-│   └── drift-detection.yml ← daily scheduled terraform plan
+│   ├── test.yml              ← runs unit tests on every PR
+│   ├── infra-plan.yml        ← terraform plan on every PR touching infra/
+│   ├── infra-apply.yml       ← terraform apply on merge to main (requires WIF)
+│   ├── infra-bootstrap.yml   ← one-time initial dev provisioning (uses SA key)
+│   ├── build-deploy.yml      ← build images, push to GAR, helm deploy
+│   └── drift-detection.yml   ← daily scheduled terraform plan
 │
 infra/terraform/
 │   ├── modules/            ← reusable Terraform modules
@@ -25,6 +26,14 @@ infra/terraform/
 │
 k8s/helm/invoicemanager/    ← Helm chart (all 7 services + infra)
 ```
+
+### Bootstrap vs Ongoing workflows
+
+| Workflow | When to use | Auth method | Trigger |
+|---|---|---|---|
+| `infra-bootstrap.yml` | **First-time** dev setup only; cluster does not exist yet | SA JSON key (`GCP_SA_KEY_DEV`) | Manual `workflow_dispatch` |
+| `infra-apply.yml` | All subsequent infra changes | Workload Identity Federation (WIF) | Push to `main` / manual |
+| `build-deploy.yml` | App deployments after infra exists | WIF | Push to `main` / manual |
 
 ### GCP Components per Environment
 
@@ -50,9 +59,57 @@ k8s/helm/invoicemanager/    ← Helm chart (all 7 services + infra)
 
 ---
 
-## Step 1: Bootstrap GCP Projects (One-Time Manual Step)
+## Step 1: Bootstrap Dev Environment via GitHub Actions (Recommended)
 
-This is the **only step that requires the GCP Console or `gcloud` CLI**. Everything after this is automated.
+The `infra-bootstrap.yml` workflow replaces the previously manual Step 1 + Step 2 for the dev environment. It requires only **two secrets** to be added once to your GitHub repository:
+
+### 1a. Create a short-lived bootstrap service account key
+
+In GCP Console → IAM → Service Accounts, create (or use an existing) service account with **Owner** or **Editor** role on your dev project. Then:
+
+1. Click the service account → **Keys** tab → **Add Key** → **JSON**.
+2. Download the JSON file.
+
+> This key is used **only for the initial bootstrap run**. Once WIF is set up you should delete this key.
+
+### 1b. Add the two bootstrap secrets to GitHub
+
+Go to **GitHub → Settings → Secrets and variables → Actions** and add:
+
+| Secret | Value |
+|---|---|
+| `GCP_SA_KEY_DEV` | Full contents of the JSON key file downloaded above |
+| `GCP_PROJECT_ID_DEV` | Your dev GCP project ID (e.g. `invoicemanager-496308`) |
+
+### 1c. Run the bootstrap workflow
+
+1. Go to **GitHub → Actions → Infra Bootstrap (Dev — Initial Setup)**.
+2. Click **Run workflow**.
+3. Type `bootstrap-dev` in the confirmation field.
+4. Click **Run workflow**.
+
+The workflow will:
+1. Enable all required GCP APIs on the dev project.
+2. Create the Terraform state bucket (`invoicemanager-tfstate-dev`).
+3. Run `terraform init` + `terraform apply` to provision the full dev environment (GKE, Artifact Registry, IAM, WIF, Secret Manager, networking).
+4. Print the Terraform outputs you need for the next step.
+
+### 1d. Capture Terraform outputs
+
+When the workflow finishes, open the **"Bootstrap outputs"** step in the Actions log and copy the values printed there:
+
+```
+GCP_WIF_PROVIDER_DEV  = projects/.../locations/global/workloadIdentityPools/...
+GCP_SA_EMAIL_DEV      = github-actions-dev@<project>.iam.gserviceaccount.com
+GCP_REGISTRY_DEV      = europe-west1-docker.pkg.dev/<project>/invoicemanager
+GCP_APP_SA_EMAIL_DEV  = invoicemanager-app-dev@<project>.iam.gserviceaccount.com
+```
+
+---
+
+## Step 1 (Alternative): Manual Bootstrap with Local `gcloud`
+
+If you prefer a fully local bootstrap (or need to bootstrap staging/prod), you can run the script directly:
 
 ```bash
 cd infra/terraform/bootstrap
@@ -66,34 +123,21 @@ export REGION=europe-west1
 ./bootstrap.sh
 ```
 
-This script:
-1. Enables the minimum required GCP APIs on each project
-2. Creates GCS buckets for Terraform state (`invoicemanager-tfstate-{dev,staging,prod}`)
-3. Patches the `terraform.tfvars` files with your real project IDs
-
----
-
-## Step 2: Apply Terraform for the First Time
-
-Run once per environment to provision all GCP resources:
+Then run Terraform manually:
 
 ```bash
-# Dev
 cd infra/terraform/environments/dev
 terraform init
 terraform apply
-
-# Note the outputs:
-#   wif_provider            → used as GCP_WIF_PROVIDER_DEV
-#   github_actions_sa_email → used as GCP_SA_EMAIL_DEV
-#   artifact_registry_url   → used as GCP_REGISTRY_DEV
 ```
-
-Repeat for `staging` and `prod`.
 
 ---
 
-## Step 3: Configure GitHub Repository Secrets
+## Step 2: Configure GitHub Repository Secrets (after bootstrap)
+
+After either bootstrap path, add these secrets so that `infra-apply.yml` and `build-deploy.yml` can use Workload Identity Federation.
+
+> **If you used the GitHub Actions bootstrap workflow**, copy the values from the "Bootstrap outputs" step in the Actions log.
 
 Go to **GitHub → Settings → Secrets and variables → Actions** and add:
 
@@ -125,7 +169,7 @@ Go to **GitHub → Settings → Secrets and variables → Actions** and add:
 
 ---
 
-## Step 4: Configure GitHub Environments
+## Step 3: Configure GitHub Environments
 
 Go to **GitHub → Settings → Environments** and create:
 
@@ -139,7 +183,7 @@ Each environment uses its own set of secrets (set per-environment secrets in the
 
 ---
 
-## Step 5: Set Real Secret Values in GCP Secret Manager
+## Step 4: Set Real Secret Values in GCP Secret Manager
 
 Terraform created placeholder secret versions. Replace them with real values before the first deployment:
 
@@ -185,7 +229,7 @@ cat /path/to/firebase-credentials.json | \
 
 ---
 
-## Step 6: Install External Secrets Operator in GKE
+## Step 5: Install External Secrets Operator in GKE
 
 The Helm chart uses [External Secrets Operator](https://external-secrets.io/) to sync GCP Secret Manager → Kubernetes Secrets.
 
@@ -208,7 +252,7 @@ helm install external-secrets external-secrets/external-secrets \
 
 ---
 
-## Step 7: First Deployment
+## Step 6: First Deployment
 
 Push a commit to `main` (or trigger `build-deploy.yml` manually):
 

@@ -1,0 +1,203 @@
+name: Infra Bootstrap (Dev — Initial Setup)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PURPOSE
+# This workflow performs the one-time initial provisioning of the dev GCP
+# environment. It is intentionally separate from infra-apply.yml because:
+#
+#   • infra-apply.yml requires Workload Identity Federation (WIF) secrets
+#     (GCP_WIF_PROVIDER_DEV / GCP_SA_EMAIL_DEV) that don't exist until
+#     Terraform has been applied at least once.
+#   • This workflow uses a plain service-account JSON key
+#     (GCP_SA_KEY_DEV) that must be provided manually by the project owner
+#     before the first run — it is the ONLY manual step required.
+#
+# WHEN TO USE
+#   • First-time setup of the dev environment (cluster does not exist yet).
+#   • Recovering from a fully destroyed dev environment.
+#   • Never run this on an already-provisioned environment unless you intend
+#     to re-apply all Terraform state (it is safe to re-run; Terraform is
+#     idempotent, but it will touch every resource).
+#
+# REQUIRED SECRETS (set once in GitHub → Settings → Secrets → Actions)
+#   GCP_SA_KEY_DEV    — JSON key for a GCP SA with Owner or Editor role on
+#                       the dev project. Download from GCP Console → IAM →
+#                       Service Accounts → Keys → Add Key → JSON.
+#   GCP_PROJECT_ID_DEV — Your dev GCP project ID (e.g. invoicemanager-496308)
+#
+# AFTER THIS WORKFLOW COMPLETES
+#   1. Copy the workflow's "Bootstrap outputs" step values.
+#   2. Add these GitHub repository secrets (Settings → Secrets → Actions):
+#        GCP_WIF_PROVIDER_DEV  = <wif_provider output>
+#        GCP_SA_EMAIL_DEV      = <github_actions_sa_email output>
+#        GCP_REGISTRY_DEV      = <artifact_registry_url output>
+#        GCP_APP_SA_EMAIL_DEV  = <app_sa_email output>
+#   3. The regular infra-apply.yml and build-deploy.yml workflows will now
+#      work for all subsequent changes.
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: >
+          Type "bootstrap-dev" to confirm you want to provision the dev
+          environment from scratch. This is a destructive/additive operation.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: "1.9.8"
+  GCP_REGION: "europe-west1"
+  GITHUB_REPO: "jetcar/invoicemanager"
+
+jobs:
+  bootstrap-dev:
+    name: Bootstrap dev infrastructure
+    runs-on: ubuntu-latest
+    # No GitHub Environment gate here intentionally — WIF / Environments may
+    # not be configured yet when this workflow is first run.
+
+    steps:
+      # ── 1. Safety guard ──────────────────────────────────────────────────
+      - name: Validate confirmation input
+        if: inputs.confirm != 'bootstrap-dev'
+        run: |
+          echo "::error::Confirmation input must be exactly 'bootstrap-dev'. Got: '${{ inputs.confirm }}'"
+          exit 1
+
+      # ── 2. Validate required secrets are present ──────────────────────────
+      - name: Check required secrets
+        run: |
+          missing=()
+          [[ -z "$GCP_SA_KEY" ]]       && missing+=("GCP_SA_KEY_DEV")
+          [[ -z "$GCP_PROJECT_ID" ]]   && missing+=("GCP_PROJECT_ID_DEV")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error::The following required secrets are not set: ${missing[*]}"
+            echo ""
+            echo "To fix this:"
+            echo "  1. Go to GitHub → Settings → Secrets and variables → Actions"
+            echo "  2. Add the missing secret(s):"
+            echo "     GCP_SA_KEY_DEV    — JSON service-account key with Owner/Editor"
+            echo "                         on project \$GCP_PROJECT_ID_DEV"
+            echo "     GCP_PROJECT_ID_DEV — your dev GCP project ID"
+            exit 1
+          fi
+          echo "✓ All required secrets are present."
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY_DEV }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+      - uses: actions/checkout@v4
+
+      # ── 3. Authenticate to GCP with the SA JSON key ──────────────────────
+      - name: Authenticate to GCP (service-account key)
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_DEV }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # ── 4. Bootstrap prerequisites (APIs + tfstate bucket) ────────────────
+      - name: Enable required GCP APIs
+        run: |
+          echo "→ Enabling APIs on project ${{ secrets.GCP_PROJECT_ID_DEV }} …"
+          gcloud services enable \
+            cloudresourcemanager.googleapis.com \
+            iam.googleapis.com \
+            iamcredentials.googleapis.com \
+            sts.googleapis.com \
+            storage.googleapis.com \
+            container.googleapis.com \
+            containerregistry.googleapis.com \
+            artifactregistry.googleapis.com \
+            secretmanager.googleapis.com \
+            compute.googleapis.com \
+            --project="${{ secrets.GCP_PROJECT_ID_DEV }}"
+          echo "✓ APIs enabled."
+
+      - name: Create Terraform state bucket (idempotent)
+        run: |
+          BUCKET="invoicemanager-tfstate-dev"
+          echo "→ Ensuring state bucket gs://${BUCKET} exists …"
+          if ! gcloud storage buckets describe "gs://${BUCKET}" \
+                --project="${{ secrets.GCP_PROJECT_ID_DEV }}" &>/dev/null; then
+            gcloud storage buckets create "gs://${BUCKET}" \
+              --project="${{ secrets.GCP_PROJECT_ID_DEV }}" \
+              --location="${{ env.GCP_REGION }}" \
+              --uniform-bucket-level-access \
+              --public-access-prevention
+            gcloud storage buckets update "gs://${BUCKET}" --versioning
+            echo "✓ Bucket created."
+          else
+            echo "✓ Bucket already exists — skipping creation."
+          fi
+
+      - name: Patch terraform.tfvars with real project ID
+        working-directory: infra/terraform/environments/dev
+        run: |
+          PROJECT="${{ secrets.GCP_PROJECT_ID_DEV }}"
+          if grep -q "CHANGEME" terraform.tfvars; then
+            sed -i "s/invoicemanager-dev-CHANGEME/${PROJECT}/" terraform.tfvars
+            echo "✓ Patched terraform.tfvars: project_id = ${PROJECT}"
+          else
+            echo "✓ terraform.tfvars already contains a real project ID."
+          fi
+
+      # ── 5. Terraform init + apply ─────────────────────────────────────────
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/dev
+        run: terraform init
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+      - name: Terraform Validate
+        working-directory: infra/terraform/environments/dev
+        run: terraform validate
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+      - name: Terraform Plan
+        working-directory: infra/terraform/environments/dev
+        run: terraform plan -out=tfplan
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+      - name: Terraform Apply
+        working-directory: infra/terraform/environments/dev
+        run: terraform apply tfplan
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+      # ── 6. Print outputs so operator can configure GitHub secrets ─────────
+      - name: Bootstrap outputs — copy these to GitHub secrets
+        working-directory: infra/terraform/environments/dev
+        run: |
+          echo "════════════════════════════════════════════════════════════"
+          echo " Bootstrap complete! Set these as GitHub repository secrets:"
+          echo "════════════════════════════════════════════════════════════"
+          echo ""
+          WIF=$(terraform output -raw wif_provider 2>/dev/null || echo "<not available>")
+          SA=$(terraform output -raw github_actions_sa_email 2>/dev/null || echo "<not available>")
+          REG=$(terraform output -raw artifact_registry_url 2>/dev/null || echo "<not available>")
+          APP_SA=$(terraform output -raw app_sa_email 2>/dev/null || echo "<not available>")
+          echo "  GCP_WIF_PROVIDER_DEV  = ${WIF}"
+          echo "  GCP_SA_EMAIL_DEV      = ${SA}"
+          echo "  GCP_REGISTRY_DEV      = ${REG}"
+          echo "  GCP_APP_SA_EMAIL_DEV  = ${APP_SA}"
+          echo "  GCP_PROJECT_ID_DEV    = ${{ secrets.GCP_PROJECT_ID_DEV }}"
+          echo "  GCP_REGION            = ${{ env.GCP_REGION }}"
+          echo ""
+          echo "After adding those secrets you can run infra-apply.yml and"
+          echo "build-deploy.yml as normal."
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
