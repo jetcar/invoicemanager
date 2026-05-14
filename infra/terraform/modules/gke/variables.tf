@@ -45,12 +45,7 @@ variable "master_authorized_networks" {
     cidr_block   = string
     display_name = string
   }))
-  default = [
-    {
-      cidr_block   = "0.0.0.0/0"
-      display_name = "all"
-    }
-  ]
+  default = []
 }
 
 variable "release_channel" {

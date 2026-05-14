@@ -20,12 +20,15 @@ resource "google_container_cluster" "primary" {
     master_ipv4_cidr_block  = var.master_ipv4_cidr_block
   }
 
-  master_authorized_networks_config {
-    dynamic "cidr_blocks" {
-      for_each = var.master_authorized_networks
-      content {
-        cidr_block   = cidr_blocks.value.cidr_block
-        display_name = cidr_blocks.value.display_name
+  dynamic "master_authorized_networks_config" {
+    for_each = length(var.master_authorized_networks) > 0 ? [1] : []
+    content {
+      dynamic "cidr_blocks" {
+        for_each = var.master_authorized_networks
+        content {
+          cidr_block   = cidr_blocks.value.cidr_block
+          display_name = cidr_blocks.value.display_name
+        }
       }
     }
   }

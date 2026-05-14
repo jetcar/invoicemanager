@@ -154,6 +154,56 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Delete conflicting manually created dev resources (idempotent)
+        run: |
+          set -euo pipefail
+
+          PROJECT="${{ secrets.GCP_PROJECT_ID_DEV }}"
+          REGION="${{ env.GCP_REGION }}"
+
+          echo "→ Removing known conflicting manual resources in ${PROJECT} (${REGION})..."
+
+          if gcloud artifacts repositories describe "invoicemanager" \
+            --location="${REGION}" \
+            --project="${PROJECT}" >/dev/null 2>&1; then
+            echo "Deleting Artifact Registry repository: invoicemanager"
+            gcloud artifacts repositories delete "invoicemanager" \
+              --location="${REGION}" \
+              --project="${PROJECT}" \
+              --quiet
+          else
+            echo "Artifact Registry repository not found, skipping."
+          fi
+
+          if gcloud container clusters describe "invoicemanager-dev" \
+            --region="${REGION}" \
+            --project="${PROJECT}" >/dev/null 2>&1; then
+            echo "Deleting GKE cluster: invoicemanager-dev"
+            gcloud container clusters delete "invoicemanager-dev" \
+              --region="${REGION}" \
+              --project="${PROJECT}" \
+              --quiet
+          else
+            echo "GKE cluster not found, skipping."
+          fi
+
+          for sa in \
+            "invoicemanager-app-dev@${PROJECT}.iam.gserviceaccount.com" \
+            "gke-node-dev@${PROJECT}.iam.gserviceaccount.com" \
+            "github-actions-dev@${PROJECT}.iam.gserviceaccount.com"; do
+            if gcloud iam service-accounts describe "${sa}" \
+              --project="${PROJECT}" >/dev/null 2>&1; then
+              echo "Deleting service account: ${sa}"
+              gcloud iam service-accounts delete "${sa}" \
+                --project="${PROJECT}" \
+                --quiet
+            else
+              echo "Service account not found, skipping: ${sa}"
+            fi
+          done
+
+          echo "✓ Manual resource cleanup complete."
+
       - name: Terraform Init
         working-directory: infra/terraform/environments/dev
         run: terraform init
