@@ -77,7 +77,7 @@ module "iam" {
   project_id  = var.project_id
   environment = "dev"
 
-  depends_on = [module.apis]
+  depends_on = [module.apis, module.gke]
 }
 
 # ── Secret Manager ────────────────────────────────────────────────────────────
