@@ -142,6 +142,12 @@ pip install lxml pytest
 python -m pytest tests/ -v
 ```
 
+## Railway Deployment
+
+For Railway setup (monorepo service mapping, env vars, HAProxy internal routing, and verification), see:
+
+- [`docs/railway-setup.md`](docs/railway-setup.md)
+
 ## Spec-First Workflow (Invoice Service)
 
 Invoice service now uses a **spec-first OpenAPI workflow** with a committed, versioned contract:
