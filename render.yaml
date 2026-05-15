@@ -1,0 +1,285 @@
+# render.yaml — Render Blueprint for InvoiceManager
+#
+# Architecture overview
+# ─────────────────────
+# Public entry-point : HAProxy web service (invoicemanager-haproxy)
+# API microservices  : 7 private services (pserv) — never exposed to the internet
+# Messaging          : Kafka + Zookeeper deployed as private Docker services
+# Databases          : 7 managed PostgreSQL instances (one per microservice)
+# Cache              : 1 managed Redis instance
+#
+# Notes
+# ─────
+# 1. DATABASE_URL is injected by Render as  postgres://…  (standard libpq URL).
+#    SQLAlchemy asyncpg requires  postgresql+asyncpg://…
+#    Replace the scheme in your app startup, e.g.:
+#      os.environ["DATABASE_URL"] = os.environ["DATABASE_URL"]
+#          .replace("postgres://", "postgresql+asyncpg://", 1)
+#
+# 2. SECRET_KEY, SMTP_HOST, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, APP_BASE_URL,
+#    and FIREBASE_CREDENTIALS_JSON are marked  sync: false  — supply them
+#    manually in the Render dashboard (Environment → Secret Files / Env Vars).
+#
+# 3. Kafka/Zookeeper are deployed as Docker private services from public images.
+#    They are only reachable inside Render's private network.
+#
+# 4. All managed Postgres databases default to the "free" plan.
+#    For production workloads upgrade to "starter" or higher in the dashboard.
+
+# ──────────────────────────────────────────────
+# Shared environment-variable group
+# ──────────────────────────────────────────────
+envVarGroups:
+  - name: invoicemanager-shared
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "30"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: ARCHIVE_THRESHOLD_DAYS
+        value: "365"
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        value: invoicemanager-kafka.internal:9092
+      - key: PORT
+        value: "8000"
+
+# ──────────────────────────────────────────────
+# Managed PostgreSQL databases (one per service)
+# ──────────────────────────────────────────────
+databases:
+  - name: auth-db
+    databaseName: auth_db
+    user: auth_user
+    plan: free
+
+  - name: company-db
+    databaseName: company_db
+    user: company_user
+    plan: free
+
+  - name: invoice-db
+    databaseName: invoice_db
+    user: invoice_user
+    plan: free
+
+  - name: supplier-db
+    databaseName: supplier_db
+    user: supplier_user
+    plan: free
+
+  - name: notification-db
+    databaseName: notification_db
+    user: notification_user
+    plan: free
+
+  - name: audit-db
+    databaseName: audit_db
+    user: audit_user
+    plan: free
+
+  - name: archive-db
+    databaseName: archive_db
+    user: archive_user
+    plan: free
+
+# ──────────────────────────────────────────────
+# Services
+# ──────────────────────────────────────────────
+services:
+
+  # ── Managed Redis ────────────────────────────
+  - type: redis
+    name: invoicemanager-redis
+    plan: free
+    ipAllowList: []
+
+  # ── Zookeeper (required by Kafka) ────────────
+  - type: pserv
+    name: invoicemanager-zookeeper
+    env: docker
+    image:
+      url: confluentinc/cp-zookeeper:7.6.0
+    plan: starter
+    envVars:
+      - key: ZOOKEEPER_CLIENT_PORT
+        value: "2181"
+      - key: ZOOKEEPER_TICK_TIME
+        value: "2000"
+
+  # ── Kafka ─────────────────────────────────────
+  - type: pserv
+    name: invoicemanager-kafka
+    env: docker
+    image:
+      url: confluentinc/cp-kafka:7.6.0
+    plan: starter
+    envVars:
+      - key: KAFKA_BROKER_ID
+        value: "1"
+      - key: KAFKA_ZOOKEEPER_CONNECT
+        value: invoicemanager-zookeeper.internal:2181
+      - key: KAFKA_ADVERTISED_LISTENERS
+        value: PLAINTEXT://invoicemanager-kafka.internal:9092
+      - key: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+        value: PLAINTEXT:PLAINTEXT
+      - key: KAFKA_INTER_BROKER_LISTENER_NAME
+        value: PLAINTEXT
+      - key: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+        value: "1"
+      - key: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+        value: "true"
+
+  # ── auth-service ──────────────────────────────
+  - type: pserv
+    name: auth-service
+    env: docker
+    dockerfilePath: ./services/auth-service/Dockerfile
+    dockerContext: ./services/auth-service
+    plan: starter
+    envVars:
+      - fromGroup: invoicemanager-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: auth-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: invoicemanager-redis
+          property: connectionString
+
+  # ── company-service ───────────────────────────
+  - type: pserv
+    name: company-service
+    env: docker
+    dockerfilePath: ./services/company-service/Dockerfile
+    dockerContext: ./services/company-service
+    plan: starter
+    envVars:
+      - fromGroup: invoicemanager-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: company-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: invoicemanager-redis
+          property: connectionString
+
+  # ── invoice-service ───────────────────────────
+  - type: pserv
+    name: invoice-service
+    env: docker
+    dockerfilePath: ./services/invoice-service/Dockerfile
+    dockerContext: ./services/invoice-service
+    plan: starter
+    envVars:
+      - fromGroup: invoicemanager-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: invoice-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: invoicemanager-redis
+          property: connectionString
+
+  # ── supplier-service ──────────────────────────
+  - type: pserv
+    name: supplier-service
+    env: docker
+    dockerfilePath: ./services/supplier-service/Dockerfile
+    dockerContext: ./services/supplier-service
+    plan: starter
+    envVars:
+      - fromGroup: invoicemanager-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: supplier-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: invoicemanager-redis
+          property: connectionString
+
+  # ── notification-service ──────────────────────
+  - type: pserv
+    name: notification-service
+    env: docker
+    dockerfilePath: ./services/notification-service/Dockerfile
+    dockerContext: ./services/notification-service
+    plan: starter
+    envVars:
+      - fromGroup: invoicemanager-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: notification-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: invoicemanager-redis
+          property: connectionString
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+
+  # ── audit-service ─────────────────────────────
+  - type: pserv
+    name: audit-service
+    env: docker
+    dockerfilePath: ./services/audit-service/Dockerfile
+    dockerContext: ./services/audit-service
+    plan: starter
+    envVars:
+      - fromGroup: invoicemanager-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: audit-db
+          property: connectionString
+
+  # ── archive-service ───────────────────────────
+  - type: pserv
+    name: archive-service
+    env: docker
+    dockerfilePath: ./services/archive-service/Dockerfile
+    dockerContext: ./services/archive-service
+    plan: starter
+    envVars:
+      - fromGroup: invoicemanager-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: archive-db
+          property: connectionString
+      - key: INVOICE_DATABASE_URL
+        fromDatabase:
+          name: invoice-db
+          property: connectionString
+
+  # ── HAProxy — public API gateway ──────────────
+  # Single public-facing entry point. Routes incoming requests by URL prefix
+  # to the correct private microservice using Render's internal DNS
+  # (<service-name>.internal).
+  - type: web
+    name: invoicemanager-haproxy
+    env: docker
+    dockerfilePath: ./haproxy/Dockerfile
+    dockerContext: ./haproxy
+    plan: starter
+    healthCheckPath: /health
