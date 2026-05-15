@@ -8,7 +8,7 @@ COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh
 
-# Defaults use service names on private networking; override per platform if DNS names differ.
+# Defaults are example private-network service names; verify actual Railway internal DNS names and override as needed.
 ENV AUTH_BACKEND_HOST=auth-service \
     COMPANY_BACKEND_HOST=company-service \
     INVOICE_BACKEND_HOST=invoice-service \
