@@ -131,7 +131,7 @@ Set these variables on the `haproxy` service to your Railway internal service DN
 - `AUDIT_BACKEND_HOST`
 - `ARCHIVE_BACKEND_HOST`
 
-If your internal names match defaults (`<service>.internal`), you can leave them unset.
+If your internal names match defaults (`auth-service`, `company-service`, etc.), you can leave them unset.
 
 ## 8) Verify deployment
 

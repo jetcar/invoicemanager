@@ -7,14 +7,14 @@ COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh
 
-# Defaults for internal DNS hostnames; override these env vars per platform if names differ.
-ENV AUTH_BACKEND_HOST=auth-service.internal \
-    COMPANY_BACKEND_HOST=company-service.internal \
-    INVOICE_BACKEND_HOST=invoice-service.internal \
-    SUPPLIER_BACKEND_HOST=supplier-service.internal \
-    NOTIFICATION_BACKEND_HOST=notification-service.internal \
-    AUDIT_BACKEND_HOST=audit-service.internal \
-    ARCHIVE_BACKEND_HOST=archive-service.internal
+# Defaults use service names on private networking; override per platform if DNS names differ.
+ENV AUTH_BACKEND_HOST=auth-service \
+    COMPANY_BACKEND_HOST=company-service \
+    INVOICE_BACKEND_HOST=invoice-service \
+    SUPPLIER_BACKEND_HOST=supplier-service \
+    NOTIFICATION_BACKEND_HOST=notification-service \
+    AUDIT_BACKEND_HOST=audit-service \
+    ARCHIVE_BACKEND_HOST=archive-service
 
 EXPOSE 80
 
