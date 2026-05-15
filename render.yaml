@@ -64,37 +64,37 @@ databases:
   - name: auth-db
     databaseName: auth_db
     user: auth_user
-    plan: starter
+    plan: basic-256mb
 
   - name: company-db
     databaseName: company_db
     user: company_user
-    plan: starter
+    plan: basic-256mb
 
   - name: invoice-db
     databaseName: invoice_db
     user: invoice_user
-    plan: starter
+    plan: basic-256mb
 
   - name: supplier-db
     databaseName: supplier_db
     user: supplier_user
-    plan: starter
+    plan: basic-256mb
 
   - name: notification-db
     databaseName: notification_db
     user: notification_user
-    plan: starter
+    plan: basic-256mb
 
   - name: audit-db
     databaseName: audit_db
     user: audit_user
-    plan: starter
+    plan: basic-256mb
 
   - name: archive-db
     databaseName: archive_db
     user: archive_user
-    plan: starter
+    plan: basic-256mb
 
 # ──────────────────────────────────────────────
 # Services
