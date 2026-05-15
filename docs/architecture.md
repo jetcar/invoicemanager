@@ -1,6 +1,6 @@
 # InvoiceManager — Infrastructure Architecture
 
-> Auto-generated on **2026-05-15 05:51 UTC** by [`scripts/generate_architecture_diagram.py`](../scripts/generate_architecture_diagram.py).
+> Auto-generated on **2026-05-15 07:14 UTC** by [`scripts/generate_architecture_diagram.py`](../scripts/generate_architecture_diagram.py).
 > Re-runs daily via GitHub Actions ([`.github/workflows/architecture-diagram.yml`](../.github/workflows/architecture-diagram.yml))
 > and on every push that touches infrastructure files.
 
