@@ -13,12 +13,6 @@ resource "google_container_cluster" "primary" {
     services_secondary_range_name = var.service_range_name
   }
 
-  # Private cluster: nodes have no public IPs
-  private_cluster_config {
-    enable_private_nodes    = true
-    enable_private_endpoint = false
-  }
-
   release_channel {
     channel = var.release_channel
   }
