@@ -6,14 +6,14 @@ This guide deploys InvoiceManager to Railway from this monorepo.
 
 1. In Railway, create a new project connected to this repository.
 2. Create one service per path:
-   - `/home/runner/work/invoicemanager/invoicemanager/haproxy`
-   - `/home/runner/work/invoicemanager/invoicemanager/services/auth-service`
-   - `/home/runner/work/invoicemanager/invoicemanager/services/company-service`
-   - `/home/runner/work/invoicemanager/invoicemanager/services/invoice-service`
-   - `/home/runner/work/invoicemanager/invoicemanager/services/supplier-service`
-   - `/home/runner/work/invoicemanager/invoicemanager/services/notification-service`
-   - `/home/runner/work/invoicemanager/invoicemanager/services/audit-service`
-   - `/home/runner/work/invoicemanager/invoicemanager/services/archive-service`
+   - `./haproxy`
+   - `./services/auth-service`
+   - `./services/company-service`
+   - `./services/invoice-service`
+   - `./services/supplier-service`
+   - `./services/notification-service`
+   - `./services/audit-service`
+   - `./services/archive-service`
 
 Use Dockerfile deploy mode for each service.
 
