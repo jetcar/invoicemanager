@@ -21,7 +21,7 @@ Use Dockerfile deploy mode for each service.
 
 Create and connect:
 
-- PostgreSQL (7 databases: one per microservice)
+- PostgreSQL (one database per microservice: `auth_db`, `company_db`, `invoice_db`, `supplier_db`, `notification_db`, `audit_db`, `archive_db`)
 - Redis
 - Kafka-compatible broker (managed Kafka or external provider)
 

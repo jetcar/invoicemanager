@@ -22,4 +22,4 @@ done
 envsubst '$AUTH_BACKEND_HOST $COMPANY_BACKEND_HOST $INVOICE_BACKEND_HOST $SUPPLIER_BACKEND_HOST $NOTIFICATION_BACKEND_HOST $AUDIT_BACKEND_HOST $ARCHIVE_BACKEND_HOST' \
   < /usr/local/etc/haproxy/haproxy.railway.template.cfg \
   > /usr/local/etc/haproxy/haproxy.cfg
-exec haproxy -f /usr/local/etc/haproxy/haproxy.cfg
+exec haproxy -W -f /usr/local/etc/haproxy/haproxy.cfg
