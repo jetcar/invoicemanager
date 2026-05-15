@@ -149,6 +149,7 @@ jobs:
   deploy-dev:
     name: Deploy to dev
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: dev
     needs: build
     if: github.event_name == 'push' || inputs.environment == 'dev'
@@ -194,6 +195,7 @@ jobs:
   deploy-staging:
     name: Deploy to staging
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: staging
     needs: [build, deploy-dev]
     if: github.event_name == 'push' || inputs.environment == 'staging'
@@ -240,6 +242,7 @@ jobs:
   deploy-prod:
     name: Deploy to production
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
     needs: [build, deploy-staging]
     if: github.event_name == 'push' || inputs.environment == 'prod'
