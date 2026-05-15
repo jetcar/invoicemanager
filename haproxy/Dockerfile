@@ -1,8 +1,9 @@
 FROM haproxy:2.9-alpine
 
+# gettext provides envsubst, used by /entrypoint.sh to render HAProxy config from env vars.
 RUN apk add --no-cache gettext
 
-COPY haproxy.railway.template.cfg /usr/local/etc/haproxy/haproxy.template.cfg
+COPY haproxy.railway.template.cfg /usr/local/etc/haproxy/haproxy.railway.template.cfg
 COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh

@@ -19,5 +19,5 @@ for v in $required_vars; do
   fi
 done
 
-envsubst < /usr/local/etc/haproxy/haproxy.template.cfg > /usr/local/etc/haproxy/haproxy.cfg
+envsubst < /usr/local/etc/haproxy/haproxy.railway.template.cfg > /usr/local/etc/haproxy/haproxy.cfg
 exec haproxy -f /usr/local/etc/haproxy/haproxy.cfg
