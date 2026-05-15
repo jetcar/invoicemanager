@@ -12,9 +12,9 @@ ARCHIVE_BACKEND_HOST
 "
 
 for v in $required_vars; do
-  eval "val=\${$v}"
+  val="$(printenv "$v" || true)"
   if [ -z "$val" ]; then
-    echo "$v is required and cannot be empty" >&2
+    echo "ERROR: $v is required but not set or empty. Configure it in your Railway service environment variables." >&2
     exit 1
   fi
 done
