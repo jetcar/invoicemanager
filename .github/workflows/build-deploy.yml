@@ -218,6 +218,13 @@ jobs:
             --wait \
             --timeout=10m
 
+      - name: Wait for External Secrets CRDs
+        run: |
+          kubectl wait --for=condition=Established --timeout=180s \
+            crd/externalsecrets.external-secrets.io \
+            crd/secretstores.external-secrets.io \
+            crd/clustersecretstores.external-secrets.io
+
       - name: Helm upgrade / install
         run: |
           APP_SA_EMAIL="${{ secrets.GCP_APP_SA_EMAIL_DEV }}"
@@ -307,6 +314,13 @@ jobs:
             --set installCRDs=true \
             --wait \
             --timeout=10m
+
+      - name: Wait for External Secrets CRDs
+        run: |
+          kubectl wait --for=condition=Established --timeout=180s \
+            crd/externalsecrets.external-secrets.io \
+            crd/secretstores.external-secrets.io \
+            crd/clustersecretstores.external-secrets.io
 
       - name: Helm upgrade / install
         run: |
@@ -398,6 +412,13 @@ jobs:
             --set installCRDs=true \
             --wait \
             --timeout=10m
+
+      - name: Wait for External Secrets CRDs
+        run: |
+          kubectl wait --for=condition=Established --timeout=180s \
+            crd/externalsecrets.external-secrets.io \
+            crd/secretstores.external-secrets.io \
+            crd/clustersecretstores.external-secrets.io
 
       - name: Helm upgrade / install
         run: |
