@@ -224,6 +224,17 @@ jobs:
             crd/externalsecrets.external-secrets.io \
             crd/secretstores.external-secrets.io \
             crd/clustersecretstores.external-secrets.io
+          # Poll until the API server's discovery endpoint exposes the new groups
+          # (kubectl wait confirms the CRD object exists, but Helm's API discovery
+          # can lag until the API server registers the new group)
+          for kind in ExternalSecret SecretStore; do
+            echo "Waiting for $kind to appear in API discovery..."
+            until kubectl api-resources --api-group=external-secrets.io 2>/dev/null | grep -q "^${kind}"; do
+              echo "  $kind not yet discoverable, retrying in 5s..."
+              sleep 5
+            done
+            echo "  $kind is discoverable"
+          done
 
       - name: Helm upgrade / install
         run: |
@@ -321,6 +332,15 @@ jobs:
             crd/externalsecrets.external-secrets.io \
             crd/secretstores.external-secrets.io \
             crd/clustersecretstores.external-secrets.io
+          # Poll until the API server's discovery endpoint exposes the new groups
+          for kind in ExternalSecret SecretStore; do
+            echo "Waiting for $kind to appear in API discovery..."
+            until kubectl api-resources --api-group=external-secrets.io 2>/dev/null | grep -q "^${kind}"; do
+              echo "  $kind not yet discoverable, retrying in 5s..."
+              sleep 5
+            done
+            echo "  $kind is discoverable"
+          done
 
       - name: Helm upgrade / install
         run: |
@@ -419,6 +439,15 @@ jobs:
             crd/externalsecrets.external-secrets.io \
             crd/secretstores.external-secrets.io \
             crd/clustersecretstores.external-secrets.io
+          # Poll until the API server's discovery endpoint exposes the new groups
+          for kind in ExternalSecret SecretStore; do
+            echo "Waiting for $kind to appear in API discovery..."
+            until kubectl api-resources --api-group=external-secrets.io 2>/dev/null | grep -q "^${kind}"; do
+              echo "  $kind not yet discoverable, retrying in 5s..."
+              sleep 5
+            done
+            echo "  $kind is discoverable"
+          done
 
       - name: Helm upgrade / install
         run: |
