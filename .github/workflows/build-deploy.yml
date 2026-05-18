@@ -27,6 +27,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: build-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   HELM_VERSION: "3.16.0"
   GCP_REGION: europe-west1
@@ -179,6 +183,21 @@ jobs:
         run: |
           helm repo add external-secrets https://charts.external-secrets.io --force-update
           helm repo update
+
+          # Recover from a stuck pending release left by a previously cancelled/failed run
+          status=$(helm status external-secrets -n external-secrets -o json 2>/dev/null | jq -r '.info.status // empty')
+          if [[ "$status" =~ ^pending- ]]; then
+            echo "Release is stuck in '$status'; attempting rollback to unblock..."
+            last_deployed=$(helm history external-secrets -n external-secrets -o json \
+              | jq -r '[.[] | select(.status=="deployed")] | if length > 0 then max_by(.revision).revision | tostring else "null" end')
+            if [[ -n "$last_deployed" && "$last_deployed" != "null" ]]; then
+              helm rollback external-secrets "$last_deployed" -n external-secrets --wait --timeout 5m || true
+            else
+              echo "No previously deployed revision found; removing stuck release..."
+              helm delete external-secrets -n external-secrets --no-hooks || true
+            fi
+          fi
+
           helm upgrade --install external-secrets external-secrets/external-secrets \
             --namespace external-secrets \
             --create-namespace \
@@ -241,6 +260,21 @@ jobs:
         run: |
           helm repo add external-secrets https://charts.external-secrets.io --force-update
           helm repo update
+
+          # Recover from a stuck pending release left by a previously cancelled/failed run
+          status=$(helm status external-secrets -n external-secrets -o json 2>/dev/null | jq -r '.info.status // empty')
+          if [[ "$status" =~ ^pending- ]]; then
+            echo "Release is stuck in '$status'; attempting rollback to unblock..."
+            last_deployed=$(helm history external-secrets -n external-secrets -o json \
+              | jq -r '[.[] | select(.status=="deployed")] | if length > 0 then max_by(.revision).revision | tostring else "null" end')
+            if [[ -n "$last_deployed" && "$last_deployed" != "null" ]]; then
+              helm rollback external-secrets "$last_deployed" -n external-secrets --wait --timeout 5m || true
+            else
+              echo "No previously deployed revision found; removing stuck release..."
+              helm delete external-secrets -n external-secrets --no-hooks || true
+            fi
+          fi
+
           helm upgrade --install external-secrets external-secrets/external-secrets \
             --namespace external-secrets \
             --create-namespace \
@@ -304,6 +338,21 @@ jobs:
         run: |
           helm repo add external-secrets https://charts.external-secrets.io --force-update
           helm repo update
+
+          # Recover from a stuck pending release left by a previously cancelled/failed run
+          status=$(helm status external-secrets -n external-secrets -o json 2>/dev/null | jq -r '.info.status // empty')
+          if [[ "$status" =~ ^pending- ]]; then
+            echo "Release is stuck in '$status'; attempting rollback to unblock..."
+            last_deployed=$(helm history external-secrets -n external-secrets -o json \
+              | jq -r '[.[] | select(.status=="deployed")] | if length > 0 then max_by(.revision).revision | tostring else "null" end')
+            if [[ -n "$last_deployed" && "$last_deployed" != "null" ]]; then
+              helm rollback external-secrets "$last_deployed" -n external-secrets --wait --timeout 5m || true
+            else
+              echo "No previously deployed revision found; removing stuck release..."
+              helm delete external-secrets -n external-secrets --no-hooks || true
+            fi
+          fi
+
           helm upgrade --install external-secrets external-secrets/external-secrets \
             --namespace external-secrets \
             --create-namespace \
