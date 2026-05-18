@@ -271,7 +271,11 @@ jobs:
     timeout-minutes: 20
     environment: staging
     needs: [build, deploy-dev]
-    if: github.event_name == 'push' || inputs.environment == 'staging'
+    if: >
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.deploy-dev.result == 'success' || needs.deploy-dev.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.environment == 'staging')
 
     steps:
       - uses: actions/checkout@v4
@@ -387,7 +391,11 @@ jobs:
     timeout-minutes: 20
     environment: production
     needs: [build, deploy-staging]
-    if: github.event_name == 'push' || inputs.environment == 'prod'
+    if: >
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.environment == 'prod')
 
     steps:
       - uses: actions/checkout@v4

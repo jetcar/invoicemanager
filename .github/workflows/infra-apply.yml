@@ -61,7 +61,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging   # Requires manual approval via GitHub Environments
     needs: apply-dev
-    if: github.event_name == 'push' || inputs.environment == 'staging'
+    if: >
+      always() &&
+      (needs.apply-dev.result == 'success' || needs.apply-dev.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.environment == 'staging')
     defaults:
       run:
         working-directory: infra/terraform/environments/staging
@@ -91,7 +94,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production  # Requires required reviewers set in GitHub Environments
     needs: apply-staging
-    if: github.event_name == 'push' || inputs.environment == 'prod'
+    if: >
+      always() &&
+      (needs.apply-staging.result == 'success' || needs.apply-staging.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.environment == 'prod')
     defaults:
       run:
         working-directory: infra/terraform/environments/prod
