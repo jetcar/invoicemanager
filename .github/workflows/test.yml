@@ -18,12 +18,14 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: services/invoice-service/tests/requirements-test.txt
+          cache-dependency-path: |
+            services/invoice-service/requirements.txt
+            services/invoice-service/tests/requirements-test.txt
 
       - name: Install test dependencies
         run: |
           cd services/invoice-service
-          pip install lxml pytest
+          python -m pip install -r requirements.txt -r tests/requirements-test.txt
 
       - name: Run tests
         run: |
