@@ -175,6 +175,19 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
+      - name: Unlock stuck Helm releases
+        run: |
+          for RELEASE_NS in "external-secrets:external-secrets" "invoicemanager:invoicemanager"; do
+            RELEASE="${RELEASE_NS%%:*}"
+            NS="${RELEASE_NS##*:}"
+            STATUS=$(helm status "$RELEASE" -n "$NS" -o json 2>/dev/null | jq -r '.info.status' || echo "not-installed")
+            if [[ "$STATUS" =~ ^(pending-install|pending-upgrade|pending-rollback)$ ]]; then
+              echo "Release '$RELEASE' in namespace '$NS' is stuck in '$STATUS'; recovering..."
+              helm rollback "$RELEASE" -n "$NS" --wait --timeout=5m 2>/dev/null || \
+                helm uninstall "$RELEASE" -n "$NS" || true
+            fi
+          done
+
       - name: Install / upgrade External Secrets Operator
         run: |
           helm repo add external-secrets https://charts.external-secrets.io --force-update
@@ -236,6 +249,19 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
+
+      - name: Unlock stuck Helm releases
+        run: |
+          for RELEASE_NS in "external-secrets:external-secrets" "invoicemanager:invoicemanager"; do
+            RELEASE="${RELEASE_NS%%:*}"
+            NS="${RELEASE_NS##*:}"
+            STATUS=$(helm status "$RELEASE" -n "$NS" -o json 2>/dev/null | jq -r '.info.status' || echo "not-installed")
+            if [[ "$STATUS" =~ ^(pending-install|pending-upgrade|pending-rollback)$ ]]; then
+              echo "Release '$RELEASE' in namespace '$NS' is stuck in '$STATUS'; recovering..."
+              helm rollback "$RELEASE" -n "$NS" --wait --timeout=5m 2>/dev/null || \
+                helm uninstall "$RELEASE" -n "$NS" || true
+            fi
+          done
 
       - name: Install / upgrade External Secrets Operator
         run: |
@@ -299,6 +325,19 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
+
+      - name: Unlock stuck Helm releases
+        run: |
+          for RELEASE_NS in "external-secrets:external-secrets" "invoicemanager:invoicemanager"; do
+            RELEASE="${RELEASE_NS%%:*}"
+            NS="${RELEASE_NS##*:}"
+            STATUS=$(helm status "$RELEASE" -n "$NS" -o json 2>/dev/null | jq -r '.info.status' || echo "not-installed")
+            if [[ "$STATUS" =~ ^(pending-install|pending-upgrade|pending-rollback)$ ]]; then
+              echo "Release '$RELEASE' in namespace '$NS' is stuck in '$STATUS'; recovering..."
+              helm rollback "$RELEASE" -n "$NS" --wait --timeout=5m 2>/dev/null || \
+                helm uninstall "$RELEASE" -n "$NS" || true
+            fi
+          done
 
       - name: Install / upgrade External Secrets Operator
         run: |
