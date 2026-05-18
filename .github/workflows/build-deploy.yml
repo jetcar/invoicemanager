@@ -224,16 +224,23 @@ jobs:
             crd/externalsecrets.external-secrets.io \
             crd/secretstores.external-secrets.io \
             crd/clustersecretstores.external-secrets.io
-          # Poll until the API server's discovery endpoint exposes the new groups
-          # (kubectl wait confirms the CRD object exists, but Helm's API discovery
-          # can lag until the API server registers the new group)
-          for kind in ExternalSecret SecretStore; do
-            echo "Waiting for $kind to appear in API discovery..."
-            until kubectl api-resources --api-group=external-secrets.io 2>/dev/null | grep -q "^${kind}"; do
-              echo "  $kind not yet discoverable, retrying in 5s..."
+          # Poll until API discovery returns the External Secrets resources.
+          # Use bounded retries so this step fails fast instead of hanging forever.
+          for resource in externalsecrets.external-secrets.io secretstores.external-secrets.io; do
+            echo "Waiting for $resource to appear in API discovery..."
+            for attempt in {1..36}; do
+              if kubectl api-resources --api-group=external-secrets.io -o name 2>/dev/null | grep -Fxq "$resource"; then
+                echo "  $resource is discoverable"
+                break
+              fi
+              if [[ "$attempt" -eq 36 ]]; then
+                echo "  $resource did not appear in API discovery after 180s"
+                kubectl api-resources --api-group=external-secrets.io -o name || true
+                exit 1
+              fi
+              echo "  $resource not yet discoverable, retrying in 5s..."
               sleep 5
             done
-            echo "  $kind is discoverable"
           done
 
       - name: Helm upgrade / install
@@ -332,14 +339,23 @@ jobs:
             crd/externalsecrets.external-secrets.io \
             crd/secretstores.external-secrets.io \
             crd/clustersecretstores.external-secrets.io
-          # Poll until the API server's discovery endpoint exposes the new groups
-          for kind in ExternalSecret SecretStore; do
-            echo "Waiting for $kind to appear in API discovery..."
-            until kubectl api-resources --api-group=external-secrets.io 2>/dev/null | grep -q "^${kind}"; do
-              echo "  $kind not yet discoverable, retrying in 5s..."
+          # Poll until API discovery returns the External Secrets resources.
+          # Use bounded retries so this step fails fast instead of hanging forever.
+          for resource in externalsecrets.external-secrets.io secretstores.external-secrets.io; do
+            echo "Waiting for $resource to appear in API discovery..."
+            for attempt in {1..36}; do
+              if kubectl api-resources --api-group=external-secrets.io -o name 2>/dev/null | grep -Fxq "$resource"; then
+                echo "  $resource is discoverable"
+                break
+              fi
+              if [[ "$attempt" -eq 36 ]]; then
+                echo "  $resource did not appear in API discovery after 180s"
+                kubectl api-resources --api-group=external-secrets.io -o name || true
+                exit 1
+              fi
+              echo "  $resource not yet discoverable, retrying in 5s..."
               sleep 5
             done
-            echo "  $kind is discoverable"
           done
 
       - name: Helm upgrade / install
@@ -439,14 +455,23 @@ jobs:
             crd/externalsecrets.external-secrets.io \
             crd/secretstores.external-secrets.io \
             crd/clustersecretstores.external-secrets.io
-          # Poll until the API server's discovery endpoint exposes the new groups
-          for kind in ExternalSecret SecretStore; do
-            echo "Waiting for $kind to appear in API discovery..."
-            until kubectl api-resources --api-group=external-secrets.io 2>/dev/null | grep -q "^${kind}"; do
-              echo "  $kind not yet discoverable, retrying in 5s..."
+          # Poll until API discovery returns the External Secrets resources.
+          # Use bounded retries so this step fails fast instead of hanging forever.
+          for resource in externalsecrets.external-secrets.io secretstores.external-secrets.io; do
+            echo "Waiting for $resource to appear in API discovery..."
+            for attempt in {1..36}; do
+              if kubectl api-resources --api-group=external-secrets.io -o name 2>/dev/null | grep -Fxq "$resource"; then
+                echo "  $resource is discoverable"
+                break
+              fi
+              if [[ "$attempt" -eq 36 ]]; then
+                echo "  $resource did not appear in API discovery after 180s"
+                kubectl api-resources --api-group=external-secrets.io -o name || true
+                exit 1
+              fi
+              echo "  $resource not yet discoverable, retrying in 5s..."
               sleep 5
             done
-            echo "  $kind is discoverable"
           done
 
       - name: Helm upgrade / install
