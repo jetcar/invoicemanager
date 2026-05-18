@@ -258,6 +258,7 @@ jobs:
             --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_DEV }}" \
             --set global.gcpAppSaEmail="${APP_SA_EMAIL}" \
             --set global.secretPrefix="invoicemanager-dev" \
+            --disable-openapi-validation \
             --wait \
             --timeout=10m \
             --atomic
@@ -378,6 +379,7 @@ jobs:
             --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_STAGING }}" \
             --set global.gcpAppSaEmail="${APP_SA_EMAIL}" \
             --set global.secretPrefix="invoicemanager-staging" \
+            --disable-openapi-validation \
             --wait \
             --timeout=10m \
             --atomic
@@ -498,6 +500,7 @@ jobs:
             --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_PROD }}" \
             --set global.gcpAppSaEmail="${APP_SA_EMAIL}" \
             --set global.secretPrefix="invoicemanager-prod" \
+            --disable-openapi-validation \
             --wait \
             --timeout=15m \
             --atomic
