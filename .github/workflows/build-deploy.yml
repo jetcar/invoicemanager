@@ -175,15 +175,31 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
+      - name: Install / upgrade External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io --force-update
+          helm repo update
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            --namespace external-secrets \
+            --create-namespace \
+            --set installCRDs=true \
+            --wait \
+            --timeout=10m
+
       - name: Helm upgrade / install
         run: |
+          APP_SA_EMAIL="${{ secrets.GCP_APP_SA_EMAIL_DEV }}"
+          if [[ -z "$APP_SA_EMAIL" ]]; then
+            APP_SA_EMAIL="invoicemanager-app-dev@${{ secrets.GCP_PROJECT_ID_DEV }}.iam.gserviceaccount.com"
+          fi
+
           helm upgrade --install invoicemanager k8s/helm/invoicemanager \
             --namespace invoicemanager \
             --create-namespace \
             --set global.imageTag="${{ needs.build.outputs.image_tag }}" \
             --set global.imageRegistry="${{ secrets.GCP_REGISTRY_DEV }}" \
             --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_DEV }}" \
-            --set global.gcpAppSaEmail="${{ secrets.GCP_APP_SA_EMAIL_DEV }}" \
+            --set global.gcpAppSaEmail="${APP_SA_EMAIL}" \
             --set global.secretPrefix="invoicemanager-dev" \
             --wait \
             --timeout=10m \
@@ -221,8 +237,24 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
+      - name: Install / upgrade External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io --force-update
+          helm repo update
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            --namespace external-secrets \
+            --create-namespace \
+            --set installCRDs=true \
+            --wait \
+            --timeout=10m
+
       - name: Helm upgrade / install
         run: |
+          APP_SA_EMAIL="${{ secrets.GCP_APP_SA_EMAIL_STAGING }}"
+          if [[ -z "$APP_SA_EMAIL" ]]; then
+            APP_SA_EMAIL="invoicemanager-app-staging@${{ secrets.GCP_PROJECT_ID_STAGING }}.iam.gserviceaccount.com"
+          fi
+
           helm upgrade --install invoicemanager k8s/helm/invoicemanager \
             --namespace invoicemanager \
             --create-namespace \
@@ -230,7 +262,7 @@ jobs:
             --set global.imageTag="${{ needs.build.outputs.image_tag }}" \
             --set global.imageRegistry="${{ secrets.GCP_REGISTRY_STAGING }}" \
             --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_STAGING }}" \
-            --set global.gcpAppSaEmail="${{ secrets.GCP_APP_SA_EMAIL_STAGING }}" \
+            --set global.gcpAppSaEmail="${APP_SA_EMAIL}" \
             --set global.secretPrefix="invoicemanager-staging" \
             --wait \
             --timeout=10m \
@@ -268,8 +300,24 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
+      - name: Install / upgrade External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io --force-update
+          helm repo update
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            --namespace external-secrets \
+            --create-namespace \
+            --set installCRDs=true \
+            --wait \
+            --timeout=10m
+
       - name: Helm upgrade / install
         run: |
+          APP_SA_EMAIL="${{ secrets.GCP_APP_SA_EMAIL_PROD }}"
+          if [[ -z "$APP_SA_EMAIL" ]]; then
+            APP_SA_EMAIL="invoicemanager-app-prod@${{ secrets.GCP_PROJECT_ID_PROD }}.iam.gserviceaccount.com"
+          fi
+
           helm upgrade --install invoicemanager k8s/helm/invoicemanager \
             --namespace invoicemanager \
             --create-namespace \
@@ -277,7 +325,7 @@ jobs:
             --set global.imageTag="${{ needs.build.outputs.image_tag }}" \
             --set global.imageRegistry="${{ secrets.GCP_REGISTRY_PROD }}" \
             --set global.gcpProjectId="${{ secrets.GCP_PROJECT_ID_PROD }}" \
-            --set global.gcpAppSaEmail="${{ secrets.GCP_APP_SA_EMAIL_PROD }}" \
+            --set global.gcpAppSaEmail="${APP_SA_EMAIL}" \
             --set global.secretPrefix="invoicemanager-prod" \
             --wait \
             --timeout=15m \
