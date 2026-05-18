@@ -55,8 +55,6 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -var="project_id=${{ secrets.GCP_PROJECT_ID_DEV }}"
-        env:
-          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_DEV }}
 
   apply-staging:
     name: Terraform Apply (staging)
@@ -87,8 +85,6 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -var="project_id=${{ secrets.GCP_PROJECT_ID_STAGING }}"
-        env:
-          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_STAGING }}
 
   apply-prod:
     name: Terraform Apply (prod)
@@ -119,5 +115,3 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -var="project_id=${{ secrets.GCP_PROJECT_ID_PROD }}"
-        env:
-          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID_PROD }}
