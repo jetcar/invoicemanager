@@ -29,10 +29,11 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
-            -Dsonar.projectKey=${{ github.repository_owner }}_${{ github.event.repository.name }}
+            -Dsonar.projectKey=jetcar_invoicemanager
             -Dsonar.projectName=${{ github.event.repository.name }}
             -Dsonar.sources=services
-            -Dsonar.tests=services/invoice-service/tests
+            -Dsonar.tests=services
+            -Dsonar.test.inclusions=**/tests/**
             -Dsonar.python.version=3.12
             -Dsonar.sourceEncoding=UTF-8
 
