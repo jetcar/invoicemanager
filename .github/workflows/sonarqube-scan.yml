@@ -32,8 +32,7 @@ jobs:
             -Dsonar.projectKey=jetcar_invoicemanager
             -Dsonar.projectName=${{ github.event.repository.name }}
             -Dsonar.sources=services
-            -Dsonar.tests=services
-            -Dsonar.test.inclusions=**/tests/**
+            -Dsonar.exclusions=**/tests/**
             -Dsonar.python.version=3.12
             -Dsonar.sourceEncoding=UTF-8
 
