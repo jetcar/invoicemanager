@@ -1,0 +1,79 @@
+name: SonarQube Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sonarqube:
+    name: SonarQube analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install invoice-service dependencies
+        run: |
+          cd services/invoice-service
+          python -m pip install -r requirements.txt -r tests/requirements-test.txt
+
+      - name: SonarQube Scan
+        id: sonarqube_scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ github.repository }}
+            -Dsonar.projectName=${{ github.repository }}
+            -Dsonar.sources=services
+            -Dsonar.tests=services/invoice-service/tests
+            -Dsonar.python.version=3.12
+            -Dsonar.sourceEncoding=UTF-8
+            -Dsonar.qualitygate.wait=true
+
+      - name: Build SonarQube report
+        if: always()
+        run: |
+          {
+            echo "# SonarQube Scan Report"
+            echo
+            echo "- Repository: ${{ github.repository }}"
+            echo "- Commit: ${{ github.sha }}"
+            echo "- Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "- Generated at (UTC): $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            if [ -f .scannerwork/report-task.txt ]; then
+              echo "## report-task.txt"
+              echo '```'
+              cat .scannerwork/report-task.txt
+              echo '```'
+            else
+              echo "report-task.txt was not produced."
+            fi
+          } > sonarqube-report.md
+
+      - name: Upload SonarQube report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-report-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            sonarqube-report.md
+            .scannerwork/report-task.txt
