@@ -21,16 +21,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install invoice-service dependencies
-        run: |
-          cd services/invoice-service
-          python -m pip install -r requirements.txt -r tests/requirements-test.txt
-
       - name: SonarQube Scan
         id: sonarqube_scan
         uses: SonarSource/sonarqube-scan-action@v5
@@ -39,8 +29,8 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
-            -Dsonar.projectKey=${{ github.repository }}
-            -Dsonar.projectName=${{ github.repository }}
+            -Dsonar.projectKey=${{ github.repository_owner }}_${{ github.event.repository.name }}
+            -Dsonar.projectName=${{ github.event.repository.name }}
             -Dsonar.sources=services
             -Dsonar.tests=services/invoice-service/tests
             -Dsonar.python.version=3.12
