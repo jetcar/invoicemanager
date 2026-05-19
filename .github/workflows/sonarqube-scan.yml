@@ -30,7 +30,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=jetcar_invoicemanager
-            -Dsonar.projectName=${{ github.event.repository.name }}
+            -Dsonar.projectName=jetcar_invoicemanager
             -Dsonar.sources=services
             -Dsonar.exclusions=**/tests/**
             -Dsonar.python.version=3.12
