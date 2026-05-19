@@ -45,7 +45,6 @@ jobs:
             -Dsonar.tests=services/invoice-service/tests
             -Dsonar.python.version=3.12
             -Dsonar.sourceEncoding=UTF-8
-            -Dsonar.qualitygate.wait=true
 
       - name: Build SonarQube report
         if: always()
